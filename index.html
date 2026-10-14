@@ -333,6 +333,15 @@ footer{text-align:center;color:var(--mut);font-size:11.5px;padding:18px}
 .ns-kpi-grid .k, .ns-kpi-grid .ns-invoice-kpi { min-height:108px; }
 .ns-accounting-note { display:none !important; }
 </style>
+<style id="hb-role-remember-print-style">
+  .hb-remember{display:flex;align-items:center;gap:8px;margin:10px 0 12px;font-size:12px;color:var(--mut,#65748a);cursor:pointer}
+  .hb-remember input{width:auto;margin:0;accent-color:var(--brand,#17365d)}
+  body:not(.ns-admin-role) .admin-only{display:none!important}
+  .hb-print-actions{display:flex;gap:8px;margin:0 0 14px}
+  .hb-print-actions button{background:#17365d;color:#fff;border:0;border-radius:6px;padding:9px 14px;font-weight:700;cursor:pointer}
+  .hb-print-actions button.alt{background:#e9eef5;color:#17365d}
+  @media print{.hb-print-actions{display:none!important}}
+</style>
 </head>
 <body>
 <div id="app">
@@ -341,17 +350,17 @@ footer{text-align:center;color:var(--mut);font-size:11.5px;padding:18px}
 </header>
 <div class="bar noprint" id="bar">
   <button class="mbtn btn s" onclick="toggleMenu()" aria-label="Menu"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg>Menu</button>
-  <button class="mbtn btn s" onclick="syncAll(true)" aria-label="Refresh data"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a8 8 0 1 1-2.3-5.7"/><path d="M20 4v5h-5"/></svg></button>
+  <button class="mbtn btn s ed" onclick="syncAll(true)" aria-label="Refresh data"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a8 8 0 1 1-2.3-5.7"/><path d="M20 4v5h-5"/></svg></button>
   <div class="acts">
     <div class="mwho" id="mwho"></div>
     <button class="btn ed" onclick="$('#fi').click()">Upload NetSuite GL</button>
     <input type="file" id="fi" accept=".csv,.txt,.xlsx,.xlsm,.xls" multiple hidden>
     <div id="drop" class="ed">or drop NetSuite GL files here</div>
-    <button class="btn s" onclick="syncAll(true)">Refresh Data</button>
-    <button class="btn s" onclick="nsDownloadTemplate()">GL Template</button><button class="btn s" onclick="xl()">Export Excel</button>
+    <button class="btn s ed" onclick="syncAll(true)">Refresh Data</button>
+    <button class="btn s admin-only" onclick="nsDownloadTemplate()">GL Template</button><button class="btn s" onclick="xl()">Export Excel</button>
     <button class="btn s" onclick="csvPack()">Export CSV Pack</button>
-    <button class="btn s" onclick="window.print()">Print / PDF</button><button class="btn s" onclick="nsV2OpenManagementPrint()">Management PDF</button>
-    <button class="btn d ed" id="bClear" onclick="clearAll()">Clear Reports</button>
+    <button class="btn s" onclick="nsPrintCurrentView()">Print / PDF</button><button class="btn s" onclick="nsV2OpenManagementPrint()">Management PDF</button>
+    <button class="btn d ed admin-only" id="bClear" onclick="clearAll()">Clear Reports</button>
     <input type="file" id="fr" accept=".js,.json,.txt" hidden>
   </div>
   <span class="bd ed" id="pubst"></span>
@@ -847,7 +856,7 @@ function toggleMenu(){$('#bar').classList.toggle('open')}
 document.addEventListener('click',e=>{const b=$('#bar');if(b&&e.target.closest&&e.target.closest('.acts .btn'))b.classList.remove('open')});
 try{matchMedia('(max-width:700px)').addEventListener('change',()=>{if(me)render()})}catch(e){}
 function setPubBadge(){const e=$('#pubst');if(e&&me){e.textContent=unpub?'Unpublished changes':'Published';e.className='bd ed '+(unpub?'w':'ok')}}
-function updUI(){document.body.classList.toggle('super',me.role==='super');document.body.classList.toggle('ed',can(2));$('#mwho').textContent=$('#who').textContent=me.u+' ('+roleName(me.role)+')  |  Licence until '+dfmt(licEnd())+(LS('hbk_lastsync')?'  |  Synced '+LS('hbk_lastsync').slice(11,16):'');setPubBadge()}
+function updUI(){document.body.classList.toggle('super',me.role==='super');document.body.classList.toggle('ed',can(2));document.body.classList.toggle('ns-admin-role',!!me&&ROLES[me.role]>=ROLES.admin);$('#mwho').textContent=$('#who').textContent=me.u+' ('+roleName(me.role)+')  |  Licence until '+dfmt(licEnd())+(LS('hbk_lastsync')?'  |  Synced '+LS('hbk_lastsync').slice(11,16):'');setPubBadge()}
 
 /* ---------- security, shared data package, licence & log ---------- */
 const ts=()=>new Date().toLocaleString('sv-SE');
@@ -955,7 +964,7 @@ function drawGate(g){
   else if(g==='nocrypto')b='<p>This page must be opened from a file on your computer or from an https:// address so that encryption is available.</p>';
   else if(g==='setup')b='<p>First-time setup: create the <b>super administrator</b> account (the owner account). The data is encrypted with your password.</p><form onsubmit="doSetup();return false">'+inp('gk','Setup key','password')+inp('gu','Super admin username')+inp('gp','Password (8+ characters)','password')+inp('gp2','Confirm password','password')+'<button class="btn">Create super administrator</button></form><p class="note" style="margin-top:10px">Already have a backup? <a class="lnk" onclick="$(\'#fr\').click()">Restore from a backup file</a></p>';
   else if(g==='preview')b='<div class="gtabs"><a class="lnk on">Sign in</a><a class="lnk">Super admin sign-in</a></div><form onsubmit="return false">'+inp('pu','Username')+inp('pw','Password','password')+'<button class="btn">Sign in</button></form><p style="margin-top:16px"><button class="btn s xs" onclick="prevGate(false)">Close preview</button></p>';
-  else if(g==='login')b='<div class="gtabs"><a class="lnk'+(sup?'':' on')+'" onclick="setGm(\'user\')">Sign in</a><a class="lnk'+(sup?' on':'')+'" onclick="setGm(\'super\')">Super admin sign-in</a></div>'+(sup?'<p class="note">Super admin session: licence, administrators and security. Forgot the password? Sign in as <b>recovery</b> with your recovery code, then reset it under Users.</p>':'')+'<form onsubmit="doLogin();return false">'+inp('gu','Username')+inp('gp','Password','password')+'<button class="btn" id="gb">'+(sup?'Sign in as super admin':'Sign in')+'</button></form>';
+  else if(g==='login')b='<div class="gtabs"><a class="lnk'+(sup?'':' on')+'" onclick="setGm(\'user\')">Sign in</a><a class="lnk'+(sup?' on':'')+'" onclick="setGm(\'super\')">Super admin sign-in</a></div>'+(sup?'<p class="note">Super admin session: licence, administrators and security. Forgot the password? Sign in as <b>recovery</b> with your recovery code, then reset it under Users.</p>':'')+'<form onsubmit="doLogin();return false">'+inp('gu','Username')+inp('gp','Password','password')+'<label class="hb-remember"><input type="checkbox" id="rememberMe"> Remember me on this device</label><button class="btn" id="gb">'+(sup?'Sign in as super admin':'Sign in')+'</button></form>';
   else{const why=clockBad?'The computer clock was set back, so the licence is locked until the super administrator renews it.':'The licence ended on '+dfmt(licEnd())+'.';
     b=me.role==='super'?'<p>'+why+' Renew it to continue.</p><input type="date" class="in" id="ge" value="'+plus2()+'"><button class="btn" onclick="setLic(\'ge\')">Renew licence</button> <button class="btn s" onclick="logout()">Log out</button>':'<p>'+why+' Ask the super administrator to renew it.</p><button class="btn s" onclick="logout()">Log out</button>'}
   const cf=CFG(),st=cf.loginStyle==='card'?'card':'min',gt=$('#gate');
@@ -963,7 +972,8 @@ function drawGate(g){
   gt.setAttribute('data-s',st);gt.setAttribute('data-a',cf.loginAnim||'line');gt.setAttribute('data-d',dk?'1':'0');
   gt.style.cssText='--gbg:'+bgc+';--gt:'+(dk?'#ffffff':'#16202e')+';--gm:'+(dk?'#c4cbd6':'#6b7280')+';--gi:'+(dk?'rgba(255,255,255,.4)':'#cfd3d8');
   gt.innerHTML='<div class="gbox"'+(st==='card'&&sup&&g==='login'?' style="border-top:6px solid var(--acc)"':'')+'>'+(cf.logo?'<img src="'+cf.logo+'" alt="" style="height:40px;margin-bottom:10px;display:block">':'')+'<h2>'+esc(cf.name)+'</h2><div class="gl"></div>'+(g==='login'||g==='preview'?'<p class="gs">'+esc(cf.loginText)+'</p>':'')+b+'<p id="gm" class="gm"></p></div><div class="gf">'+esc(cf.foot)+'</div>';
-  const f=$('#gate input');if(f&&g!=='preview')f.focus()}
+  if(g==='login'){const remember=LS('hbk_remember_me')===true,u=$('#gu'),c=$('#rememberMe'),saved=LS('hbk_remember_user');if(remember&&u&&typeof saved==='string')u.value=saved;if(c)c.checked=remember}
+  const f=$('#gu')||$('#gate input');if(f&&g!=='preview')f.focus()}
 function prevGate(v){gprev=v;render()}
 const recCode=()=>{const A='ABCDEFGHJKLMNPQRSTUVWXYZ23456789',r=rnd(16);return [0,4,8,12].map(i=>[...r.slice(i,i+4)].map(x=>A[x%32]).join('')).join('-')};
 async function doSetup(){
@@ -987,6 +997,7 @@ async function doLogin(){
   if(!r){f.n++;if(f.n>=5){f.until=Date.now()+60000;f.n=0}SV('hbk_fail',f);secLog('Login','Failed','Failed '+(gateMode==='super'?'super admin ':'')+'sign-in for "'+String(name).trim()+'"');gmsg('Wrong username or password.');return}
   if(gateMode==='super'&&e.role!=='super'){gmsg('This account is not a super admin. Use "Sign in".');return}
   if(gateMode!=='super'&&e.role==='super'){gmsg('Super admin accounts must use "Super admin sign-in".');return}
+  const rememberBox=$('#rememberMe'),rememberUser=!!(rememberBox&&rememberBox.checked);SV('hbk_remember_me',rememberUser);if(rememberUser)SV('hbk_remember_user',String(name||'').trim());else{try{localStorage.removeItem('hbk_remember_user')}catch(x){}}
   loadPayload(p);dataRaw=r.raw;myPriv=r.priv;
   if(expired()&&e.role!=='super'){wipeData();gmsg('The licence has expired. Ask the super administrator to renew it.');return}
   SV('hbk_fail',{n:0,until:0});me=e;idleAt=Date.now();secLog('Login','Login',e.role==='super'?'Super admin session':'Signed in');
@@ -3362,10 +3373,10 @@ function nsDownloadBranchBudgetTemplate(){
   const year=nsBudgetCurrentYear(),prior=new Map(nsBudgetRowsForYear(year).map(r=>[nsBudgetKey(r.year,r.entity,r.branch),r]));
   const headers=['Year','Entity','Branch',...NS_BUDGET_MONTHS.map(m=>m[0]+' (AED Millions)')];
   const data=pairs.map(p=>{const r=prior.get(nsBudgetKey(year,p.Entity,p.Branch));const months=NS_BUDGET_MONTHS.map((m,i)=>nsBudgetValue(r||{},i));return {Year:Number(year),Entity:p.Entity,Branch:p.Branch,...Object.fromEntries(NS_BUDGET_MONTHS.map((m,i)=>[headers[i+3],months[i]]))}});
-  const wb=XLSX.utils.book_new();const ws=XLSX.utils.json_to_sheet(data,{header:headers});ws['!cols']=[{wch:10},{wch:12},{wch:32},...NS_BUDGET_MONTHS.map(()=>({wch:18}))];XLSX.utils.book_append_sheet(wb,ws,'Branch Budget');
+  const wb=XLSX.utils.book_new();const ws=XLSX.utils.json_to_sheet(data,{header:headers});ws['!cols']=[{wch:10},{wch:12},{wch:32},...NS_BUDGET_MONTHS.map(()=>({wch:18}))];for(let rr=2;rr<=data.length+1;rr++){for(let cc=3;cc<15;cc++){const cell=ws[XLSX.utils.encode_cell({r:rr-1,c:cc})];if(cell&&typeof cell.v==='number')cell.z='0.00000000';}}XLSX.utils.book_append_sheet(wb,ws,'Branch Budget');
   const instructions=[
     {Topic:'Purpose',Instruction:'Enter annual budget by mapped branch. One row per Entity + Branch, with January to December budgets.'},
-    {Topic:'Budget unit',Instruction:'All month values must be entered in AED millions. Example: 1.1 means AED 1,100,000; 0.25 means AED 250,000.'},
+    {Topic:'Budget unit',Instruction:'All month values must be entered in AED millions. Keep up to 8 decimals to preserve cents: 1.31144511 means AED 1,311,445.11; 1.1 means AED 1,100,000.'},
     {Topic:'Do not change',Instruction:'Keep Year, Entity and Branch as exported so each budget matches an existing mapped branch.'},
     {Topic:'Update existing budgets',Instruction:'Re-export this template to include existing budget values. Edit any month values and upload it again. Only nonblank month cells update; blank cells leave existing budgets unchanged.'},
     {Topic:'New branch',Instruction:'First add/map the branch in Location / Entity / Branch, then download the template again.'},
@@ -3374,45 +3385,106 @@ function nsDownloadBranchBudgetTemplate(){
   XLSX.writeFile(wb,'Home_Bakery_Branch_Budget_'+year+'.xlsx');addLog('Budget','Branch Budget Template','Exported',data.length+' mapped branches for '+year+'; monthly amounts are in AED millions');msg('Budget template exported with '+data.length+' mapped branches for '+year+'.');
 }
 async function nsBudgetImportFile(file){
-  if(!file)return;if(!await guard())return;
+  if(!file)return;
+  if(!await guard())return;
   if(!window.XLSX){nsBudgetDownloadFailure('Excel reader unavailable. Reload the application and try again.');return}
+  let stage='opening workbook';
   try{
-    const wb=XLSX.read(await file.arrayBuffer(),{type:'array'}),sheet=wb.SheetNames.find(n=>/branch budget/i.test(n))||wb.SheetNames[0];
-    if(!sheet)throw new Error('The workbook has no worksheet.');
-    const rows=XLSX.utils.sheet_to_json(wb.Sheets[sheet],{header:1,raw:true,defval:null,blankrows:false});
-    if(rows.length<2)throw new Error('The budget worksheet has no data rows.');
+    const input=await file.arrayBuffer();
+    const wb=await XLSX.read(input,{type:'array'});
+    if(!wb||typeof wb!=='object')throw new Error('Excel reader did not return a workbook. Re-save the file as .xlsx and try again.');
+    const sheets=wb.Sheets&&typeof wb.Sheets==='object'?wb.Sheets:{};
+    const sheetNames=Array.isArray(wb.SheetNames)?wb.SheetNames:Object.keys(sheets);
+    if(!sheetNames.length)throw new Error('No worksheets were found in this workbook.');
+    stage='locating Branch Budget worksheet';
+    let sheet='';
+    for(const n of sheetNames){if(/branch budget/i.test(String(n||''))){sheet=n;break}}
+    if(!sheet)sheet=sheetNames[0]||'';
+    if(!sheet||!sheets[sheet])throw new Error('Could not read the selected worksheet. Sheets found: '+sheetNames.join(', '));
+    stage='reading worksheet rows';
+    if(!XLSX.utils||typeof XLSX.utils.sheet_to_json!=='function')throw new Error('Excel worksheet reader is unavailable. Reload the complete application.');
+    const converted=XLSX.utils.sheet_to_json(sheets[sheet],{header:1,raw:true,defval:null,blankrows:false});
+    const rows=Array.isArray(converted)?converted:[];
+    if(rows.length<2)throw new Error('Worksheet "'+sheet+'" contains no budget data rows.');
+    stage='validating budget headers';
     const headers=(rows[0]||[]).map(v=>String(v==null?'':v).trim());
-    const col=(re)=>headers.findIndex(h=>re.test(h));
+    const col=re=>headers.findIndex(h=>re.test(h));
     const iy=col(/^year$/i),ie=col(/^entity$/i),ib=col(/^branch$/i);
-    if(ie<0||ib<0)throw new Error('Required columns are Entity and Branch. Download the Branch Budget Template for the correct layout.');
-    const monthCols=[];const monthMatchers=[/^(jan|january)\b/i,/^(feb|february)\b/i,/^(mar|march)\b/i,/^(apr|april)\b/i,/^(may)\b/i,/^(jun|june)\b/i,/^(jul|july)\b/i,/^(aug|august)\b/i,/^(sep|sept|september)\b/i,/^(oct|october)\b/i,/^(nov|november)\b/i,/^(dec|december)\b/i];
-    headers.forEach((h,i)=>monthMatchers.forEach((re,mi)=>{if(re.test(h))monthCols.push({col:i,month:mi})}));
-    const uniqMonths=[...new Map(monthCols.map(x=>[x.month,x])).values()];if(!uniqMonths.length)throw new Error('No month columns found. Use Jan–Dec or January–December column headings.');
-    const pairs=new Map(nsBudgetPairs().map(p=>[nsBudgetKey(0,p.Entity,p.Branch),p]));
-    const known=new Set(nsBudgetPairs().map(p=>nsBudgetKey(0,p.Entity,p.Branch)));
-    const store=new Map(nsBudgetData().map(r=>[nsBudgetKey(r.year,r.entity,r.branch),Object.assign({},r,{months:Array.from({length:12},(_,i)=>nsBudgetValue(r,i))})]));
-    let validRows=0,updatedCells=0,skippedRows=0;const issues=[];
+    if(ie<0||ib<0)throw new Error('Required columns Entity and Branch were not found in row 1. Keep the standard Branch Budget headings.');
+    const monthMatchers=[/^(jan|january)\b/i,/^(feb|february)\b/i,/^(mar|march)\b/i,/^(apr|april)\b/i,/^(may)\b/i,/^(jun|june)\b/i,/^(jul|july)\b/i,/^(aug|august)\b/i,/^(sep|sept|september)\b/i,/^(oct|october)\b/i,/^(nov|november)\b/i,/^(dec|december)\b/i];
+    const monthCols=[];
+    headers.forEach((h,i)=>monthMatchers.forEach((re,mi)=>{if(re.test(h)&&!monthCols.some(x=>x.month===mi))monthCols.push({col:i,month:mi})}));
+    if(!monthCols.length)throw new Error('No month columns found. Use Jan–Dec or January–December, optionally followed by "(AED Millions)".');
+    stage='matching branches and reading amounts';
+    const activePairs=Array.isArray(nsBudgetPairs())?nsBudgetPairs():[];
+    const normBranch=x=>norm(String(x||'').trim());
+    const stripEntityPrefix=(branch,entity)=>String(branch||'').trim().replace(new RegExp('^'+String(entity).replace(/[.*+?^${}()|[\\]\\\\]/g,'\\$&')+'\\s*[-–—:|]\\s*','i'),'').trim();
+    const matchedBranch=(entity,branch)=>{
+      const exact=activePairs.find(p=>nsEntityCode(p&&p.Entity)===entity&&normBranch(p.Branch)===normBranch(branch));
+      if(exact)return String(exact.Branch).trim();
+      const bNoPrefix=normBranch(stripEntityPrefix(branch,entity));
+      if(bNoPrefix){const found=activePairs.filter(p=>nsEntityCode(p&&p.Entity)===entity&&(normBranch(p.Branch)===bNoPrefix||normBranch(stripEntityPrefix(p.Branch,entity))===bNoPrefix));if(found.length===1)return String(found[0].Branch).trim()}
+      const candidates=activePairs.filter(p=>nsEntityCode(p&&p.Entity)===entity&&(normBranch(stripEntityPrefix(branch,entity))===normBranch(p.Branch)||normBranch(branch)===normBranch(stripEntityPrefix(p.Branch,entity))));
+      return candidates.length===1?String(candidates[0].Branch).trim():'';
+    };
+    const known=new Set(activePairs.map(p=>nsBudgetKey(0,p.Entity,p.Branch)));
+    const existing=Array.isArray(nsBudgetData())?nsBudgetData():[];
+    const store=new Map(existing.map(r=>[nsBudgetKey(r.year,r.entity,r.branch),Object.assign({},r,{months:Array.from({length:12},(_,i)=>nsBudgetValue(r,i))})]));
+    let validRows=0,updatedCells=0,skippedRows=0,nonblankRows=0,unmatchedRows=0;
+    const issues=[],unmatched=new Set(),seenRows=new Set();
+    stage='validating budget branch rows';
     rows.slice(1).forEach((row,ri)=>{
-      const entity=nsEntityCode(row[ie]),branch=String(row[ib]||'').trim(),year=String(iy>=0&&row[iy]!=null&&String(row[iy]).trim()?row[iy]:nsBudgetCurrentYear()).trim();
-      if(!entity&&!branch)return;
-      if(!/^\d{4}$/.test(year)||!entity||!branch){skippedRows++;issues.push('Row '+(ri+2)+': invalid Year, Entity or Branch.');return}
-      if(!['HB','HBK','LG'].includes(entity)||!known.has(nsBudgetKey(0,entity,branch))){skippedRows++;issues.push('Row '+(ri+2)+': '+entity+' / '+branch+' is not a currently mapped HB, HBK or LG branch.');return}
-      const key=nsBudgetKey(year,entity,branch);let record=store.get(key);if(!record)record={year:Number(year),entity,branch,months:Array(12).fill(null)};
+      const safe=Array.isArray(row)?row:[];
+      const originalEntity=String(safe[ie]??'').trim();
+      const entity=nsEntityCode(originalEntity);
+      const originalBranch=String(safe[ib]??'').trim();
+      const year=String(iy>=0&&safe[iy]!=null&&String(safe[iy]).trim()?safe[iy]:nsBudgetCurrentYear()).trim();
+      if(!entity&&!originalBranch)return;
+      const hasMonth=monthCols.some(mc=>safe[mc.col]!==null&&safe[mc.col]!==undefined&&String(safe[mc.col]).trim()!=='');
+      if(hasMonth)nonblankRows++;
+      if(!/^\d{4}$/.test(year)||!entity||!originalBranch){skippedRows++;issues.push('Row '+(ri+2)+': missing or invalid Year, Entity or Branch.');return}
+      if(!['HB','HBK','LG'].includes(entity)){skippedRows++;issues.push('Row '+(ri+2)+': entity "'+originalEntity+'" is not HB, HBK or LG; row skipped.');return}
+      const mappedName=matchedBranch(entity,originalBranch);
+      // Keep valid budget rows even if their branch is not currently mapped. This preserves the workbook amounts;
+      // the row is logged so it can be mapped later and will not be silently discarded.
+      const branch=mappedName||originalBranch;
+      if(!mappedName&&!known.has(nsBudgetKey(0,entity,originalBranch))){unmatchedRows++;unmatched.add(entity+' / '+originalBranch);}
+      const key=nsBudgetKey(year,entity,branch);
+      if(seenRows.has(key)){issues.push('Row '+(ri+2)+': duplicate '+entity+' / '+branch+' / '+year+'; nonblank month values will update the same budget row.');}
+      seenRows.add(key);
+      let record=store.get(key);
+      if(!record)record={year:Number(year),entity,branch,months:Array(12).fill(null)};
       let rowCells=0;
-      uniqMonths.forEach(mc=>{
-        const raw=row[mc.col];if(raw===null||raw===undefined||String(raw).trim()==='')return;
+      monthCols.forEach(mc=>{
+        const raw=safe[mc.col];
+        if(raw===null||raw===undefined||String(raw).trim()==='')return; // blank cells leave existing values unchanged
         const v=typeof raw==='number'?raw:Number(String(raw).replace(/,/g,'').replace(/AED/ig,'').trim());
-        if(!Number.isFinite(v)){issues.push('Row '+(ri+2)+', '+NS_BUDGET_MONTHS[mc.month][1]+': not a numeric amount.');return}
-        record.months[mc.month]=Math.round(v*100)/100;rowCells++;updatedCells++;
+        if(!Number.isFinite(v)){issues.push('Row '+(ri+2)+', '+NS_BUDGET_MONTHS[mc.month][1]+': non-numeric budget value; cell ignored.');return}
+        // Template amounts are AED millions. Eight decimal places preserve AED cents (e.g. 1.31144511 = AED 1,311,445.11).
+        record.months[mc.month]=Number(v.toFixed(8));
+        rowCells++;updatedCells++;
       });
       if(rowCells){store.set(key,record);validRows++}
     });
-    if(!updatedCells)throw new Error('No valid budget values found. Enter monthly values in AED millions, e.g. 1.1 for AED 1.1 million.');
-    nsBudgets=[...store.values()].map(r=>({year:Number(r.year),entity:nsEntityCode(r.entity),branch:String(r.branch),months:Array.from({length:12},(_,i)=>nsBudgetValue(r,i))}));
-    nsBudgetYear=String(Math.max(...nsBudgets.map(r=>Number(r.year)||0))||nsBudgetCurrentYear());
-    addLog('Budget Import',file.name,issues.length||skippedRows?'Imported with warnings':'Imported',validRows+' branch-year row(s); '+updatedCells+' month value(s) updated; '+skippedRows+' row(s) skipped. '+issues.slice(0,20).join(' | '));
-    changed();render();msg('Budget import complete: '+updatedCells+' monthly value(s) updated for '+validRows+' branch-year row(s).'+(issues.length||skippedRows?' See Logs for skipped rows or warnings.':''));
-  }catch(e){addLog('Budget Import',file.name,'Failed',String(e&&e.message||e));msg('Budget import failed. See Logs: '+String(e&&e.message||e),true)}
+    if(!updatedCells){
+      const why=nonblankRows===0?'No monthly budget figures were found in the workbook.':'No valid numeric monthly budget values could be imported.';
+      throw new Error(why+' The import made no changes. Confirm the file uses AED millions (e.g. 1.31144511 = AED 1,311,445.11), and that Year, Entity, Branch and Jan–Dec columns are present.');
+    }
+    stage='saving budget values';
+    const next=Array.from(store.values()).map(r=>({year:Number(r.year),entity:nsEntityCode(r.entity),branch:String(r.branch),months:Array.from({length:12},(_,i)=>nsBudgetValue(r,i))}));
+    const nextYear=String(Math.max(...next.map(r=>Number(r.year)||0))||nsBudgetCurrentYear());
+    nsBudgets=next;nsBudgetYear=nextYear;
+    const unmatchNote=unmatchedRows?' '+unmatchedRows+' branch row(s) were kept but are not currently mapped: '+[...unmatched].slice(0,10).join(', ')+'.':'';
+    const detail=validRows+' branch-year row(s); '+updatedCells+' month value(s) updated; '+skippedRows+' invalid row(s) skipped.'+(issues.length?' '+issues.slice(0,10).join(' | '):'')+unmatchNote;
+    addLog('Budget Import',file.name,(issues.length||skippedRows||unmatchedRows)?'Imported with warnings':'Imported',detail);
+    changed();stage='refreshing budget display';
+    try{render()}catch(renderError){addLog('Budget Display','','Warning','Budget figures saved, but the view could not refresh automatically: '+String(renderError&&renderError.message||renderError));}
+    msg('Budget import complete: '+updatedCells+' monthly value(s) updated across '+validRows+' branch-year row(s).'+(unmatchedRows?' '+unmatchedRows+' row(s) were retained but are not currently mapped; see Logs.':'')+(issues.length||skippedRows?' Review Logs for warnings.':''),(issues.length||skippedRows||unmatchedRows)?true:false);
+  }catch(e){
+    const detail='Stage: '+stage+'. '+String(e&&e.message||e);
+    addLog('Budget Import',file.name,'Failed',detail);
+    msg('Budget import failed at '+stage+'. '+String(e&&e.message||e)+' See Logs for details.',true);
+  }
 }
 async function nsBudgetClearYear(){if(!can(3)){msg('Only an administrator can clear budgets.',true);return}if(!await uiConfirm('Delete all imported budget figures for '+nsBudgetCurrentYear()+'?'))return;const y=nsBudgetCurrentYear(),before=nsBudgets.length;nsBudgets=nsBudgets.filter(r=>String(r.year)!==String(y));addLog('Budget',String(y),'Cleared',(before-nsBudgets.length)+' budget branch-year row(s) removed');changed();render();msg('Budgets cleared for '+y+'.')}
 function nsBudgetExportRows(){return nsBudgetData().map(r=>({Year:r.year,Entity:r.entity,Branch:r.branch,...Object.fromEntries(NS_BUDGET_MONTHS.map((m,i)=>[m[0]+' (AED Millions)',nsBudgetValue(r,i)]))})).sort((a,b)=>a.Year-b.Year||a.Entity.localeCompare(b.Entity)||a.Branch.localeCompare(b.Branch))}
@@ -3657,8 +3729,8 @@ function nsShowKpiBasis(label){
 }
 function nsAttachKpiExplanations(){
   const root=document.getElementById('view');if(!root)return;
-  /* Keep the Home dashboard cards clean: no (i) icons, no explanatory subtitle text, and no hidden click-to-explain behaviour. */
-  if(String(tab||'')==='dash'){
+  /* Keep Home Dashboard and Sales Comparison cards clean: no (i) icons or click-to-explain behaviour. */
+  if(['dash','cmp'].includes(String(tab||''))){
     root.querySelectorAll('.k').forEach(el=>{
       Array.from(el.children).filter(ch=>ch.tagName==='I').forEach(ch=>ch.remove());
       el.querySelectorAll('.ns-kpi-info').forEach(ch=>ch.remove());
@@ -3841,6 +3913,47 @@ if(typeof nsOriginalBackupView==='function')V.bk=function(){return nsOriginalBac
     }
   `;document.head.appendChild(st);
 })();
+function nsPrintCurrentView(){
+  const source=document.getElementById('view');
+  if(!source){window.print();return}
+  const w=window.open('','_blank');
+  if(!w){msg('Print window was blocked. Allow pop-ups for this site and try again.',true);return}
+  try{
+    const clone=source.cloneNode(true);
+    clone.querySelectorAll('.noprint,.ns-comparison-switcher,.ns-kpi-basis-dialog,.hb-print-actions').forEach(el=>el.remove());
+    clone.querySelectorAll('label').forEach(el=>{if(el.querySelector('input,select,textarea'))el.remove()});
+    clone.querySelectorAll('button,input,select,textarea').forEach(el=>el.remove());
+    clone.querySelectorAll('[title="Click to see how this figure is calculated"]').forEach(el=>el.removeAttribute('title'));
+    clone.querySelectorAll('.ns-kpi-info,.ns-kpi-has-basis').forEach(el=>{el.classList.remove('ns-kpi-has-basis');if(el.classList.contains('ns-kpi-info'))el.remove()});
+    let title=(document.querySelector('#nav .on')||document.querySelector('#bnav .on'))?.textContent?.trim()||'Sales Report';
+    if(String(tab||'')==='cmp')title='Comparison — '+(typeof nsCmpEmbeddedView!=='undefined'&&nsCmpEmbeddedView==='budget'?'Budget vs Actual':'Sales Comparison');
+    const fmt=v=>{if(!v)return '';try{return typeof dfmt==='function'?dfmt(v):String(v)}catch(e){return String(v)}};
+    let dateFrom='',dateTo='',scope=[];
+    if(typeof flt==='object'&&flt){dateFrom=flt.df||'';dateTo=flt.dt||'';if(flt.ent)scope.push('Entity: '+flt.ent);if(flt.br)scope.push('Branch: '+flt.br);if(flt.ev)scope.push('Location: '+flt.ev)}
+    if(typeof nsCmpEntityFilter==='string'&&nsCmpEntityFilter)scope.push('Entity: '+nsCmpEntityFilter);
+    if(typeof nsCmpBranchFilter==='string'&&nsCmpBranchFilter)scope.push('Branch: '+nsCmpBranchFilter);
+    if(!dateFrom||!dateTo){const dv=[...source.querySelectorAll('input[type="date"]')].map(x=>x.value).filter(Boolean);if(!dateFrom&&dv[0])dateFrom=dv[0];if(!dateTo&&dv[1])dateTo=dv[1]}
+    const period=(dateFrom||dateTo)?(dateFrom?'From '+fmt(dateFrom):'From earliest available')+' '+(dateTo?'to '+fmt(dateTo):'through latest available'):'All available dates';
+    let scale='';try{scale=typeof nsUiScaleLabel==='function'?nsUiScaleLabel():''}catch(e){}
+    const meta=[['REPORT',title],['PERIOD',period],['SCOPE',scope.join(' · ')||'All entities / branches'],['GENERATED',new Date().toLocaleString('en-AE')+(scale?' · '+scale:'')]];
+    const styleMarkup=[...document.querySelectorAll('style')].map(x=>x.outerHTML).join('\n');
+    const linkMarkup=[...document.querySelectorAll('link[rel="stylesheet"]')].map(x=>x.outerHTML).join('\n');
+    const escPrint=v=>typeof esc==='function'?esc(String(v==null?'':v)):String(v==null?'':v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    const html='<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Home Bakery — '+escPrint(title)+'</title>'+linkMarkup+styleMarkup+'<style>'+
+      'body{margin:0!important;padding:0!important;background:#fff!important;color:#172538!important;font-family:Segoe UI,Arial,sans-serif!important;font-size:10pt!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}'+
+      '.hb-print-header{display:block!important;background:#17365d!important;color:#fff!important;padding:18px 22px!important;margin:0 0 14px!important;border:0!important;border-radius:0!important;box-shadow:none!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}'+
+      '.hb-print-header h1{color:#fff!important;font-size:22pt!important;letter-spacing:.2px!important;margin:0 0 5px!important}.hb-print-header p{display:block!important;color:#e7edf5!important;margin:0!important;font-size:9pt!important}'+
+      '.hb-print-meta{display:grid;grid-template-columns:1.3fr 2fr 1.6fr 1.8fr;gap:8px;margin-top:14px}.hb-print-meta div{padding:7px 9px;border:1px solid #ffffff50;border-radius:5px;min-width:0}.hb-print-meta span{display:block;font-size:7pt;font-weight:800;letter-spacing:.07em;color:#cbd7e6!important;margin-bottom:4px}.hb-print-meta b{font-size:8.5pt;color:#fff!important;overflow-wrap:anywhere}'+
+      '.hb-print-report{padding:0 2px}.hb-print-report .card{break-inside:avoid-page;page-break-inside:avoid;box-shadow:none!important;border:1px solid #dbe3ed!important;border-radius:7px!important;margin:0 0 11px!important;padding:10px 12px!important;background:#fff!important}.hb-print-report h2,.hb-print-report h3,.hb-print-report h4{color:#17365d!important;break-after:avoid-page}.hb-print-report table{width:100%!important;border-collapse:collapse!important;font-size:8.5pt!important;margin:7px 0 11px!important;page-break-inside:auto}.hb-print-report thead{display:table-header-group}.hb-print-report tr{break-inside:avoid-page;page-break-inside:avoid}.hb-print-report th{background:#17365d!important;color:#fff!important;font-weight:700!important;border:1px solid #cbd5e1!important;position:static!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}.hb-print-report td{border:1px solid #d6deea!important;color:#172538!important}.hb-print-report th,.hb-print-report td{padding:5px 6px!important;overflow-wrap:anywhere}.hb-print-report .note{color:#58677b!important}.hb-print-report .grid,.hb-print-report .g2{gap:8px!important}.hb-print-report svg{max-width:100%!important}.hb-print-report .sc,.hb-print-report .wrap{overflow:visible!important;max-height:none!important}.hb-print-report .ns-category-pies{grid-template-columns:repeat(3,minmax(0,1fr))!important}'+
+      '.hb-print-footer{border-top:1px solid #dbe3ed;margin-top:14px;padding-top:7px;font-size:8pt;color:#65748a;text-align:right}'+
+      '@page{size:A4 landscape;margin:10mm}@media print{.hb-print-actions{display:none!important}body{margin:0!important}.hb-print-header{margin-bottom:10px!important}}'+
+      '</style></head><body><div class="hb-print-actions"><button onclick="window.print()">Print / Save as PDF</button><button class="alt" onclick="if(window.opener){window.opener.focus();window.close()}else{history.back()}">Back</button></div><header class="hb-print-header"><h1>Home Bakery</h1><p>Management Sales Report · '+escPrint(title)+'</p><div class="hb-print-meta">'+meta.map(x=>'<div><span>'+escPrint(x[0])+'</span><b>'+escPrint(x[1])+'</b></div>').join('')+'</div></header><main class="hb-print-report">'+clone.innerHTML+'</main><footer class="hb-print-footer">Developed by Abdul Sameh · Home Bakery Management Sales Report</footer></body></html>';
+    w.document.open();w.document.write(html);w.document.close();
+    setTimeout(()=>{try{w.focus();w.print()}catch(e){}},450);
+    try{addLog('Export','Print / PDF','Prepared','Printed '+title+' | '+period)}catch(e){}
+  }catch(e){try{w.close()}catch(x){};msg('Could not prepare the print preview. '+String(e&&e.message||e),true);}
+}
+
 const nsRenderBeforeScaleAndControls=render;
 render=function(){nsRenderBeforeScaleAndControls();try{nsApplySummaryDisplayScale();nsAttachKpiExplanations()}catch(e){try{addLog('Display','Sales scale','Failed',String(e&&e.message||e))}catch(x){}}};
 
