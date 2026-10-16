@@ -342,6 +342,23 @@ footer{text-align:center;color:var(--mut);font-size:11.5px;padding:18px}
   .hb-print-actions button.alt{background:#e9eef5;color:#17365d}
   @media print{.hb-print-actions{display:none!important}}
 </style>
+<style id="hb-viewer-lockdown">
+/* Viewers only get: Export Excel, Export CSV Pack, Print / PDF, Management PDF (plus Home / Password / Log out). */
+body.role-viewer #drop,
+body.role-viewer #pubst,
+body.role-viewer #st,
+body.role-viewer .mbtn[aria-label="Refresh data"],
+body.role-viewer .bar [onclick*="syncAll"],
+body.role-viewer .bar [onclick*="clearAll"],
+body.role-viewer .bar [onclick*="nsDownloadTemplate"],
+body.role-viewer .bar [onclick*="#fi"],
+body.role-viewer .viewer-hide,
+body.role-viewer button[onclick*="nsOpenGLDetail"],
+body.role-viewer td:has(> button[onclick*="nsOpenGLDetail"]),
+body.role-viewer .ns-entity-summary th.noprint{display:none!important}
+.ns-budget-chart-wrap{background:#eaf0f8!important;border:1px solid #cfdbeb;border-radius:10px;padding:10px 10px 4px}
+@media print{.ns-budget-chart-wrap{background:#eaf0f8!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}}
+</style>
 </head>
 <body>
 <div id="app">
@@ -353,7 +370,7 @@ footer{text-align:center;color:var(--mut);font-size:11.5px;padding:18px}
   <button class="mbtn btn s ed" onclick="syncAll(true)" aria-label="Refresh data"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a8 8 0 1 1-2.3-5.7"/><path d="M20 4v5h-5"/></svg></button>
   <div class="acts">
     <div class="mwho" id="mwho"></div>
-    <button class="btn ed" onclick="$('#fi').click()">Upload NetSuite GL</button>
+    <button class="btn ed" onclick="$('#fi').click()">Upload Files</button>
     <input type="file" id="fi" accept=".csv,.txt,.xlsx,.xlsm,.xls" multiple hidden>
     <div id="drop" class="ed">or drop NetSuite GL files here</div>
     <button class="btn s ed" onclick="syncAll(true)">Refresh Data</button>
@@ -554,6 +571,8 @@ const $=s=>document.querySelector(s);
 const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const F2=n=>Number(n||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
 const F0=n=>Number(n||0).toLocaleString('en-US',{maximumFractionDigits:0});
+const NS_COUNT_COLS=/^(Quantity|Customers|Reports|Tickets|Locations|Branches|Rank|Invoices|Location Count|Branch Count|Source Row|Row|Rows|Lines|Count|Documents|Files|Months_Budgeted|Months Budgeted|Qty)$/;
+function nsFig(c,v){if(v==null)return '';if(typeof v!=='number')return v;if(/^(Budget Year|Year)$/.test(c))return String(v);return NS_COUNT_COLS.test(c)?F0(v):F2(v)}
 const LS=k=>{try{return JSON.parse(localStorage.getItem(k))}catch(e){return null}};
 const SV=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}};
 const titleCase=s=>String(s).toLowerCase().replace(/\b\w/g,c=>c.toUpperCase());
@@ -703,7 +722,8 @@ function cell(k,v){
     if(k==='Status'||k==='Result')return '<span class="bd '+(/^(OK|Pass|Loaded|Saved|Restored|Cleared|Login|Logout|Created|Updated|Extended|Deleted)$/.test(s)?'ok':/^(Fail|Failed|Wrong password)$/.test(s)?'b':'w')+'">'+esc(s)+'</span>';
     if(k==='Date')return esc(dfmt(s));
     return esc(s)}
-  if(/^(Quantity|Customers|Reports|Tickets|Locations|Branches|Rank|Invoices|Location Count|Branch Count)$/.test(k))return F0(v);
+  if(/^(Quantity|Customers|Reports|Tickets|Locations|Branches|Rank|Invoices|Location Count|Branch Count|Source Row|Row|Rows|Lines|Count|Documents|Files|Months_Budgeted|Months Budgeted|Budgeted Branches|Qty)$/.test(k))return F0(v);
+  if(/^(Budget Year|Year)$/.test(k))return String(v);
   return F2(v)+(k.includes('%')?'%':'')}
 function tbl(rows,hdr,o){o=o||{};const cut=o.max&&rows.length>o.max,sh=cut?rows.slice(0,o.max):rows;
   const th=hdr.map(h=>'<th class="'+(sh.some(r=>typeof r[h]==='number')?'n':'')+'">'+esc(h)+'</th>').join('')+(o.act?'<th></th>':'');
@@ -712,9 +732,20 @@ function tbl(rows,hdr,o){o=o||{};const cut=o.max&&rows.length>o.max,sh=cut?rows.
   if(o.tot&&rows.length)foot='<tfoot><tr>'+hdr.map((h,i)=>'<td class="'+(o.tot.includes(h)?'n':'')+'">'+(o.tot.includes(h)?cell(h,S(o.totRows||rows,h)):i===0?'TOTAL':'')+'</td>').join('')+(o.act?'<td></td>':'')+'</tr></tfoot>';
   return '<div class="sc"><table><thead><tr>'+th+'</tr></thead><tbody>'+body+'</tbody>'+foot+'</table></div>'+(cut?'<p class="note" style="margin:6px 0 0">Showing the first '+F0(o.max)+' of '+F0(rows.length)+' rows. Totals include every row. Use the filters or search to narrow down, or export for all rows.</p>':'')}
 function agg(a,kf,vf){const m=new Map();a.forEach(x=>{const k=kf(x);m.set(k,(m.get(k)||0)+vf(x))});return [...m].map(([k,v])=>[k,r2(v)])}
+function nsCleanBarLabel(t,l){
+  let x=String(l==null?'':l);
+  if(!/^(Net )?Sales by (Branch|Location)$/.test(String(t)))return x;
+  const strip=v=>{const y=String(v).replace(/^\s*(HB-KSA|HBK|HB|LG)\s*[-–—:\/]\s*/i,'').trim();return y||String(v)};
+  const entFiltered=!!((typeof flt!=='undefined'&&flt&&flt.ent)||(typeof dashRegion!=='undefined'&&dashRegion));
+  const m=/^\s*(HB-KSA|HBK|HB|LG)\s*\/\s*(.+)$/i.exec(x);
+  if(m){const b=strip(m[2]);return entFiltered?b:m[1].toUpperCase()+' / '+b}
+  const p=/^\s*(HB-KSA|HBK|HB|LG)\s*[-–—:\/]\s*(.+)$/i.exec(x);
+  if(p)return entFiltered?p[2].trim():p[1].toUpperCase()+' / '+p[2].trim();
+  return x;
+}
 function bars(t,data,o){o=o||{};data=o.asc?data.sort((a,b)=>String(a[0]).localeCompare(String(b[0]))):data.sort((a,b)=>b[1]-a[1]);data=data.slice(o.asc?-14:0,o.asc?undefined:10);
   const mx=Math.max(...data.map(d=>Math.abs(d[1])),1);
-  const label=l=>/^\d{4}-\d{2}$/.test(String(l))?nsMonthLabel(String(l)):dfmt(l);
+  const label=l=>/^\d{4}-\d{2}$/.test(String(l))?nsMonthLabel(String(l)):nsCleanBarLabel(t,dfmt(l));
   return '<div class="card"><h3>'+t+'</h3>'+(data.map(([l,v])=>'<div class="br"><span class="bl" title="'+esc(label(l))+'">'+esc(label(l))+'</span><div class="bt"><i style="width:'+Math.max(Math.abs(v)/mx*100,1)+'%"></i></div><b>'+F2(v)+'</b></div>').join('')||'<p class="em">No data</p>')+'</div>'}
 const kpi=(l,v,s)=>'<div class="k"><small>'+l+'</small><b>'+v+'</b>'+(s?'<i>'+s+'</i>':'')+'</div>';
 const empty=()=>'<div class="card em">No reports to show. Upload report files (Restaurant Summary CSV or Simphony Excel/CSV), or adjust the filters.</div>';
@@ -810,7 +841,7 @@ V.cat=()=>{
   const L=nsFiltered(),all=nsCategoryRows(L),cats=[...new Set(all.map(r=>r.Category).filter(Boolean))].sort(),rows=nsCategoryFilteredRows(L);
   if(!L.length)return nsFilters()+nsEmpty();
   const controls=`<div class="row noprint"><label>Category filter <select onchange="nsCategoryFilter=this.value;render()"><option value="">All categories</option>${cats.map(c=>`<option value="${esc(c)}"${nsCategoryFilter===c?' selected':''}>${esc(c)}</option>`).join('')}</select></label><button class="btn s xs" onclick="nsExportCategoryCSV()">Export Filtered CSV</button><button class="btn d xs" onclick="nsCategoryFilter='';render()">Reset Category</button><span class="note" style="margin:0">${rows.length} row(s)</span></div>`;
-  return nsFilters()+`<div class="card"><h3>Category Analysis</h3><p class="note">Category is detected automatically from the NetSuite Account heading. For example, <b>4001-0001 - Sales - Food</b> becomes <b>Food</b>, and <b>4001-0002 - Sales - Beverage</b> becomes <b>Beverage</b>. Account category mappings can override automatic detection. Use the category filter to focus on one category; table totals update to the filtered rows.</p>${controls}${tbl(rows,nsVisibleCols(H.cat),{tot:['Micros Sales','Invoice Sales','Gross Sales','Credit Memo Impact','Net Sales','Quantity'].filter(x=>CFG().showNetSales||x!=='Net Sales'),max:1000})}</div>`
+  return nsFilters()+`<div class="card"><h3>Category Analysis</h3><p class="note">Category is detected automatically from the NetSuite Account heading. For example, <b>4001-0001 - Sales - Food</b> becomes <b>Food</b>, and <b>4001-0002 - Sales - Beverage</b> becomes <b>Beverage</b>. Account category mappings can override automatic detection. Use the category filter to focus on one category; table totals update to the filtered rows.</p>${controls}${tbl(rows,nsVisibleCols(H.cat),{tot:['Micros Sales','Invoice Sales','Gross Sales','Credit Memo Impact','Net Sales','Quantity'].filter(x=>true||x!=='Net Sales'),max:1000})}</div>`
 };
 V.map=()=>{
   const lk=!can(2),dis=lk?' disabled':'';
@@ -856,7 +887,7 @@ function toggleMenu(){$('#bar').classList.toggle('open')}
 document.addEventListener('click',e=>{const b=$('#bar');if(b&&e.target.closest&&e.target.closest('.acts .btn'))b.classList.remove('open')});
 try{matchMedia('(max-width:700px)').addEventListener('change',()=>{if(me)render()})}catch(e){}
 function setPubBadge(){const e=$('#pubst');if(e&&me){e.textContent=unpub?'Unpublished changes':'Published';e.className='bd ed '+(unpub?'w':'ok')}}
-function updUI(){document.body.classList.toggle('super',me.role==='super');document.body.classList.toggle('ed',can(2));document.body.classList.toggle('ns-admin-role',!!me&&ROLES[me.role]>=ROLES.admin);$('#mwho').textContent=$('#who').textContent=me.u+' ('+roleName(me.role)+')  |  Licence until '+dfmt(licEnd())+(LS('hbk_lastsync')?'  |  Synced '+LS('hbk_lastsync').slice(11,16):'');setPubBadge()}
+function updUI(){document.body.classList.toggle('super',me.role==='super');document.body.classList.toggle('role-viewer',me.role==='viewer');document.body.classList.toggle('ed',can(2));document.body.classList.toggle('ns-admin-role',!!me&&ROLES[me.role]>=ROLES.admin);$('#mwho').textContent=$('#who').textContent=me.u+' ('+roleName(me.role)+')  |  Licence until '+dfmt(licEnd())+(LS('hbk_lastsync')?'  |  Synced '+LS('hbk_lastsync').slice(11,16):'');setPubBadge()}
 
 /* ---------- security, shared data package, licence & log ---------- */
 const ts=()=>new Date().toLocaleString('sv-SE');
@@ -903,7 +934,7 @@ function wipeData(){ents=DEF_ENTS();evs={};maps={};tmap={};ulog=[];reports=[];li
 const pkgText=x=>'window.HB_PKG='+JSON.stringify(x)+';\n';
 const parseRev=t=>{const m=/"rev":(\d+)/.exec(t||'');return m?+m[1]:0};
 const parseId=t=>{const m=/"id":"([^"]+)"/.exec(t||'');return m?m[1]:''};
-const DEF_CFG={name:'Home Bakery',tag:'Sales Analysis',foot:'Developed by Abdul Sameh',brand:'#1f3a5f',acc:'#b8742a',h1:'#ffffff',h2:'#ffffff',bg:'#fafaf8',style:'minimal',logo:'',size:'normal',font:'head',track:'wide',fontData:'',fontName:'',loginStyle:'min',loginAnim:'line',loginBg:'light',loginBgColor:'#fafaf8',loginText:'Sign in to continue',hideTabs:[],hideWidgets:[],mBottom:true,mDensity:'comfort',hideWidgetsM:[],showNetSales:false,fontFamily:'Segoe UI',headingFontFamily:'Georgia'};
+const DEF_CFG={name:'Home Bakery',tag:'Sales Analysis',foot:'Developed by Abdul Sameh',brand:'#1f3a5f',acc:'#b8742a',h1:'#ffffff',h2:'#ffffff',bg:'#fafaf8',style:'minimal',logo:'',size:'normal',font:'head',track:'wide',fontData:'',fontName:'',loginStyle:'min',loginAnim:'line',loginBg:'light',loginBgColor:'#fafaf8',loginText:'Sign in to continue',hideTabs:[],hideWidgets:[],mBottom:true,mDensity:'comfort',hideWidgetsM:[],showNetSales:true,fontFamily:'Segoe UI',headingFontFamily:'Georgia'};
 const lum=x=>{const m=/^#?([\da-f]{2})([\da-f]{2})([\da-f]{2})$/i.exec(x||'');return m?(0.299*parseInt(m[1],16)+0.587*parseInt(m[2],16)+0.114*parseInt(m[3],16))/255:1};
 const CFG=()=>Object.assign({},DEF_CFG,pkg&&pkg.cfg||{});
 function applyTheme(){const c=CFG(),r=document.documentElement.style;r.setProperty('--brand',c.brand);r.setProperty('--acc',c.acc);r.setProperty('--h1',c.h1);r.setProperty('--h2',c.h2);r.setProperty('--bg',c.bg);{const dk=(lum(c.h1)+lum(c.h2))/2<0.55;r.setProperty('--ht',dk?'#ffffff':'#16202e');r.setProperty('--hp',dk?'#c4d0df':'#6b7280')}r.setProperty('--fs',{small:'13px',normal:'14px',large:'16px'}[c.size]||'14px');
@@ -1028,11 +1059,11 @@ async function publishSecurityMutation(label){
   try{await persist()}finally{securitySaving=false}
   if(dirs.pub){
     await pubFolder(false);
-    if(unpub){const m=label+' was saved on this device but is not yet shared. Check the Publish folder and resolve any shared-revision conflict in Share & Backup.';msg(m,true);tab='bk';render()}
+    if(unpub){const m='Reason: the shared file could not be updated (it changed since this device loaded it, or the folder permission was refused). '+label+' was saved on this device but is not yet shared. Open Share & Backup, press Refresh to load the newest shared version, then repeat the change.';msg(m,true);tab='bk';render()}
     else render();
     return;
   }
-  const m=label+' was saved on this device only. To share it with everyone, open Share & Backup and choose the exact shared folder containing this HTML under Publish, then publish. Choosing the folder will publish this pending change.';
+  const m='Reason: no Publish folder is set on this device. '+label+' was saved on this device only. To share it with everyone, open Share & Backup and choose the exact shared folder containing this HTML under Publish, then publish. Choosing the folder will publish this pending change.';
   msg(m,true);tab='bk';render();await uiAlert(m);
 }
 async function addUser(){const u=$('#nu').value.trim(),p=$('#np').value,r=$('#nr').value;
@@ -1272,7 +1303,7 @@ async function pubFolder(silent){
   try{const p=await d.requestPermission({mode:'readwrite'});if(p!=='granted')throw new Error('permission denied');
     await flush();let old='';try{old=await(await(await d.getFileHandle(DATA_FILE)).getFile()).text()}catch(e){}
     const rid=parseId(old);
-    if(rid&&rid!==baseId){if(silent)return;if(!await uiConfirm('The shared file was changed by someone else (revision '+parseRev(old)+') since this device loaded it (revision '+baseRev+'). Publishing now will overwrite their changes. Continue?'))return}
+    if(rid&&rid!==baseId){if(silent){msg('Automatic publish paused: the shared file now holds a newer revision ('+parseRev(old)+') than this device loaded ('+baseRev+'). Your latest change is saved on this device only. Open Share & Backup and press Refresh, then repeat the change.',true);return}if(!await uiConfirm('The shared file was changed by someone else (revision '+parseRev(old)+') since this device loaded it (revision '+baseRev+'). Publishing now will overwrite everything they saved since then (new users and passwords, mappings, budgets, GL uploads). Press Cancel, then use Share & Backup > Refresh to load their version first. Continue and overwrite?'))return}
     await writeFile(d,DATA_FILE,pkgText(pkg));pubDone('folder "'+d.name+'"')}
   catch(e){if(!silent){const m='Publish failed: '+(fsErr(e)||e.message);msg(m,true);uiAlert(m);secLog('Publish','Failed',e.message)}}}
 async function autoPub(){try{if(!dirs.pub||!pkg)return;if(await dirs.pub.queryPermission({mode:'readwrite'})!=='granted')return;await pubFolder(true)}catch(e){}}
@@ -1284,7 +1315,7 @@ async function pubGit(){
     const hd={Authorization:'Bearer '+tok,Accept:'application/vnd.github+json'};let sha,rid='',rrev=0;
     const g=await fetch(url+'?ref='+encodeURIComponent(br),{headers:hd});
     if(g.ok){const j=await g.json();sha=j.sha;const t=j.content?atob(j.content.replace(/\n/g,'')):await(await fetch(j.download_url)).text();rid=parseId(t);rrev=parseRev(t)}else if(g.status!==404)throw new Error('GitHub answered '+g.status+' (check owner, repository, branch and token)');
-    if(rid&&rid!==baseId&&!await uiConfirm('The shared file was changed by someone else (revision '+rrev+') since this device loaded it (revision '+baseRev+'). Publishing now will overwrite their changes. Continue?'))return;
+    if(rid&&rid!==baseId&&!await uiConfirm('The shared file was changed by someone else (revision '+rrev+') since this device loaded it (revision '+baseRev+'). Publishing now will overwrite everything they saved since then (new users and passwords, mappings, budgets, GL uploads). Press Cancel, then use Share & Backup > Refresh to load their version first. Continue and overwrite?'))return;
     const r=await fetch(url,{method:'PUT',headers:hd,body:JSON.stringify({message:'Update shared data (revision '+pkg.rev+')',content:btoa(pkgText(pkg)),branch:br,sha})});
     if(!r.ok)throw new Error('GitHub answered '+r.status+': '+(await r.text()).slice(0,140));
     pubDone('GitHub '+c.owner+'/'+c.repo+' ('+br+')')}
@@ -1453,7 +1484,8 @@ function nsSourceLine(row,idx,h,fname){
   const amountRaw=pick([/^amount$/, /net amount/, /line amount/]);
   const tax=nv(pick([/^tax amount$/, /^tax$/, /vat amount/, /^vat$/]));
   const svc=nv(pick([/^service charge amount$/, /^service charge$/, /service charge/]));
-  const customer=sx(pick([/^name$/, /^customer$/, /customer name/, /^entity name$/, /guest/]));
+  let customer=sx(pick([/^name$/, /^customer$/, /customer name/, /^entity name$/, /guest/, /^customer\b/, /^name\b/, /^entity$/, /^client/, /^company/, /^payee/, /\bcustomer\b/]));
+  if(!customer){const j=h.findIndex(x=>/(customer|client|guest|company|payee|\bname\b)/.test(x)&&!/(location|account|branch|memo|item|file|sales|tender|employee|department|class|category|tax|document)/.test(x));if(j>=0)customer=sx(row[j])}
   const qty=nv(pick([/^quantity$/, /^qty$/, /sales count/]));
   const explicitCat=sx(pick([/^category$/, /sales category/, /gl category/]));
   if(!date||!location||!acct)return null;
@@ -1497,7 +1529,7 @@ function nsBase(r){return {Entity:r.ent,Branch:r.br,'Location':r.ev,Date:r.from}
 function nsSummaryRows(L){const m=new Map();L.forEach(r=>{const k=r.ent+'|'+r.br+'|'+r.ev+'|'+r.from;let o=m.get(k);if(!o){o=Object.assign(nsBase(r),{Reports:0,'Micros Sales':0,'Invoice Sales':0,'Gross Sales':0,'Credit Memo Impact':0,'Net Sales':0,'Journal Adjustments':0,'Total Credit':0,'Total Debit':0,'Net Sales':0});m.set(k,o)}o.Reports++;o['Micros Sales']+=r.microsSales||0;o['Invoice Sales']+=r.invoiceSales||0;o['Gross Sales']+=r.gross;o['Credit Memo Impact']+=r.creditMemo;o['Net Sales']+=r.net;o['Journal Adjustments']+=r.journalAdj;o['Total Credit']+=r.totalCredit||0;o['Total Debit']+=r.totalDebit||0;o['Net Sales']+=r.adjusted});return [...m.values()].map(o=>{H.sum.filter(h=>typeof o[h]==='number').forEach(h=>o[h]=r2(o[h]));return o})}
 function nsRegisterRows(L){return L.map(r=>Object.assign({'File(s)':(r.files||[r.file]).join(', '),Location:r.location},nsBase(r),{'Micros Sales':r.microsSales||0,'Invoice Sales':r.invoiceSales||0,'Gross Sales':r.gross,'Net Sales':r.net,'Journal Adjustments':r.journalAdj,'Total Credit':r.totalCredit||0,'Total Debit':r.totalDebit||0,'Net Sales':r.adjusted,VAT:r.vat,'Service Charge':r.svc,'Credit Memo Impact':r.creditMemo,Customers:r.customers,Tickets:r.tickets,Status:r.mapped?'OK':'Unmapped'}))}
 function nsCategoryRows(L){const a=[];L.forEach(r=>r.cats.forEach(c=>a.push(Object.assign(nsBase(r),{Account:c.account,Category:c.category,'Micros Sales':r2(c.micros||0),'Invoice Sales':r2(c.invoice||0),'Gross Sales':r2(c.gross),'Credit Memo Impact':r2(c.cm),'Net Sales':r2(c.net),Quantity:r2(c.qty),'% of Net Sales':pct(c.net,r.net)}))));return a}
-function nsVisibleCols(cols){return CFG().showNetSales?cols.slice():cols.filter(c=>c!=='Net Sales'&&!/^% of .*Net Sales$/.test(c))}
+function nsVisibleCols(cols){return true?cols.slice():cols.filter(c=>c!=='Net Sales'&&!/^% of .*Net Sales$/.test(c))}
 function nsCategoryFilteredRows(L){const q=String(nsCategoryFilter||'').trim().toLowerCase();return nsCategoryRows(L).filter(r=>!q||String(r.Category||'').toLowerCase()===q)}
 function nsExportCategoryCSV(){const rows=nsCategoryFilteredRows(nsFiltered()),cols=nsVisibleCols(H.cat);if(!rows.length){uiAlert('No category rows match the current filter.');return}dl('Home_Bakery_Category_Analysis.csv',new Blob([toCSV(rows,cols)],{type:'text/csv;charset=utf-8'}));addLog('Export','Category Analysis','Exported',rows.length+' filtered category rows')}
 function nsISODate(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')}
@@ -1583,7 +1615,7 @@ function nsFilters(){
   return `<div class="filters noprint${filtersOpen?' open':''}"><button class="btn s mfbtn" onclick="filtersOpen=!filtersOpen;render()">Filters${n?' ('+n+' active)':''}</button><div class="row frow">${sel('ent',entVals,'All entities',"flt.br='';flt.ev='';")}${sel('br',brVals,'All branches',"flt.ev='';")}${sel('ev',evVals,'All locations / events')}<input data-ns-date type="date" value="${esc(flt.df)}" onchange="nsDateValue('df',this.value)" onblur="nsDateValue('df',this.value);nsScheduleDateRender()" onkeydown="if(event.key==='Enter'){nsDateValue('df',this.value);this.blur()}" title="From date"><input data-ns-date type="date" value="${esc(flt.dt)}" onchange="nsDateValue('dt',this.value)" onblur="nsDateValue('dt',this.value);nsScheduleDateRender()" onkeydown="if(event.key==='Enter'){nsDateValue('dt',this.value);this.blur()}" title="To date"><button class="btn s xs" onclick="nsSetPeriod('month')">This Month</button><button class="btn s xs" onclick="nsSetPeriod('ytd')">Year to Date</button><button class="btn s xs" onclick="nsSetPeriod('30')">Last 30 Days</button><button class="btn d xs" onclick="nsSetPeriod('clear')">Clear Dates</button><button class="btn d xs" onclick="flt={ent:'',br:'',ev:'',df:'',dt:'',src:''};dashRegion='';nsCategoryFilter='';render()">Reset All</button></div></div>`
 }
 
-const nsEmpty=()=>'<div class="card em">No NetSuite GL data to show. Upload the NetSuite GL file(s), or download the GL Template from the top bar.</div>';
+const nsEmpty=()=>'<div class="card em">'+(me&&me.role==='viewer'?'No data to show for the current filters.':'No NetSuite GL data to show. Upload the NetSuite GL file(s), or download the GL Template from the top bar.')+'</div>';
 function nsSumAdjusted(rows){return r2((rows||[]).reduce((s,r)=>s+(Number(r.adjusted)||0),0))}
 function nsMgmtScopeNoDates(){
   return nsAll().filter(r=>{
@@ -1670,7 +1702,7 @@ function nsRenderDashboard(){
   }).join('');
   const reportDates=(()=>{const d=L.map(r=>r.from).filter(Boolean).sort();return d.length?(d[0]===d[d.length-1]?dfmt(d[0]):dfmt(d[0])+' - '+dfmt(d[d.length-1])):'-'})();
   return nsFilters()+calcNote+reg+(u?'<div class="ban">'+u+' location(s) are unmapped. Open Location / Entity / Branch to assign them.</div>':'')+
-    (W('kpi')?'<div class="grid">'+kpi('Micros Sales',F2(s.micros))+nsInvoiceKpi(F2(s.invoice))+kpi('Gross Sales',F2(s.gross))+(CFG().showNetSales?kpi('Net Sales',F2(s.net)):'')+kpi('Journal Adjustments',F2(s.journal))+kpi('Total Credit',F2(s.credit))+kpi('Total Debit',F2(s.debit))+kpi('Net Sales',F2(s.adjusted))+kpi('Report Dates','<span style="font-size:15px">'+reportDates+'</span>')+kpi('Locations',nev)+kpi('Branches',brs)+kpi('Entities',ens)+'</div><div class="grid" style="margin-top:12px">'+averageCards+'</div>':'')+
+    (W('kpi')?'<div class="grid">'+kpi('Micros Sales',F2(s.micros))+nsInvoiceKpi(F2(s.invoice))+kpi('Gross Sales',F2(s.gross))+(true?kpi('Net Sales',F2(s.net)):'')+kpi('Journal Adjustments',F2(s.journal))+kpi('Total Credit',F2(s.credit))+kpi('Total Debit',F2(s.debit))+kpi('Net Sales',F2(s.adjusted))+kpi('Report Dates','<span style="font-size:15px">'+reportDates+'</span>')+kpi('Locations',nev)+kpi('Branches',brs)+kpi('Entities',ens)+'</div><div class="grid" style="margin-top:12px">'+averageCards+'</div>':'')+
     '<div class="g2">'+(p||'')+b+'</div>'+ 
     '<div class="g2">'+(W('month')?nsMonthlyEntityLineChart(mgPool):'')+(W('event')?bars('Sales by Location',agg(L,r=>r.ev,r=>r.adjusted)):'')+'</div>'+ 
     '<div class="g2">'+(W('month')?bars('Sales by Month',agg(L,r=>r.from.slice(0,7),r=>r.adjusted),{asc:1}):'')+(W('category')?bars('Category Sales by Account',agg(nsCategoryRows(L),r=>r.Category,r=>r['Gross Sales'])):'')+'</div>'+ 
@@ -1679,9 +1711,10 @@ function nsRenderDashboard(){
 
 function nsInvoiceDetailRows(L){
   L=L||nsFiltered();const rows=[];
+  const nameByDoc=new Map();L.forEach(r=>(r.lines||[]).forEach(x=>{if(x.doc&&x.customer&&!nameByDoc.has(x.doc))nameByDoc.set(x.doc,x.customer)}));
   L.forEach(r=>(r.lines||[]).forEach(x=>{
     if(x.type!=='Invoice'||!nsSalesAccount(x.account))return;
-    rows.push({Entity:r.ent,Branch:r.br,Location:r.location,Date:x.date||r.from,'Document Number':x.doc||'',Name:x.customer||'',Account:x.account||'',Category:nsCategory(x.account,x.category),'Memo / Description':x.memo||'',Debit:r2(x.debit||0),Credit:r2(x.credit||0),'Line Amount':r2(x.amount||0),'Credit - Debit':r2((x.credit||0)-(x.debit||0)),'Source File':x.sourceFile||'', 'Source Row':x.sourceRow||''});
+    rows.push({Entity:r.ent,Branch:r.br,Location:r.location,Date:x.date||r.from,'Document Number':x.doc||'',Name:x.customer||nameByDoc.get(x.doc)||'',Account:x.account||'',Category:nsCategory(x.account,x.category),'Memo / Description':x.memo||'',Debit:r2(x.debit||0),Credit:r2(x.credit||0),'Line Amount':r2(x.amount||0),'Credit - Debit':r2((x.credit||0)-(x.debit||0)),'Source File':x.sourceFile||'', 'Source Row':x.sourceRow||''});
   }));
   return rows.sort((a,b)=>String(a.Date).localeCompare(String(b.Date))||String(a.Branch).localeCompare(String(b.Branch))||String(a['Document Number']).localeCompare(String(b['Document Number'])));
 }
@@ -1694,7 +1727,7 @@ function nsOpenInvoiceDetailsInNewTab(){
   const rows=nsInvoiceDetailRows(nsFiltered()),cols=H.inv||['Entity','Branch','Location','Date','Document Number','Account','Category','Memo / Description','Debit','Credit','Line Amount','Credit - Debit','Source File','Source Row'];
   const w=window.open('','_blank');
   if(!w){addLog('Navigation','Invoice Details','Blocked','Browser blocked the new tab. Allow pop-ups for this HTML file and try again.');msg('The browser blocked the new tab. Allow pop-ups and check Change Log.',true);return}
-  const table='<table><thead><tr>'+cols.map(c=>'<th>'+esc(c)+'</th>').join('')+'</tr></thead><tbody>'+rows.map(r=>'<tr>'+cols.map(c=>'<td>'+esc(r[c]==null?'':r[c])+'</td>').join('')+'</tr>').join('')+'</tbody></table>';
+  const table='<table><thead><tr>'+cols.map(c=>'<th>'+esc(c)+'</th>').join('')+'</tr></thead><tbody>'+rows.map(r=>'<tr>'+cols.map(c=>'<td>'+esc(nsFig(c,r[c]))+'</td>').join('')+'</tr>').join('')+'</tbody></table>';
   const html='<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Home Bakery - Invoice Sales Details</title><style>body{font-family:Segoe UI,Arial,sans-serif;margin:24px;color:#1b2635}h1{font-size:24px}p{color:#586575}.actions{display:flex;gap:8px;flex-wrap:wrap;margin:14px 0}button{border:0;border-radius:6px;padding:10px 14px;background:#193b65;color:white;cursor:pointer}button.alt{background:#e8edf4;color:#18324f}table{border-collapse:collapse;width:100%;font-size:12px}th,td{border:1px solid #d6dde7;padding:7px;text-align:left;vertical-align:top}th{background:#edf2f8;position:sticky;top:0}td{max-width:420px;overflow-wrap:anywhere}.wrap{overflow:auto;max-height:75vh}@media print{.actions{display:none}.wrap{max-height:none;overflow:visible}}</style></head><body><h1>Home Bakery — Invoice Sales Details</h1><p>Invoice sales lines under mapped sales accounts; the records shown follow the current dashboard filters. Rows: '+rows.length+'</p><div class="actions"><button onclick="if(window.opener){window.opener.focus();window.close()}else{history.back()}">Back to Home Dashboard</button><button class="alt" onclick="window.print()">Print / Save PDF</button></div><div class="wrap">'+table+'</div></body></html>';
   w.document.open();w.document.write(html);w.document.close();
 }
@@ -1718,17 +1751,18 @@ function nsCustomerGroups(L){
     .sort((a,b)=>b.sales-a.sales||a.name.localeCompare(b.name));
 }
 function nsToggleCustomer(i){nsExpandedCustomerIndex=nsExpandedCustomerIndex===i?-1:i;render()}
+const NS_INV_VIEW_COLS=['Branch / Location','Date','Document Number','Amount'];
+function nsInvLite(rows,fmtAmt){return (rows||[]).map(r=>({'Branch / Location':r.Location||r.Branch||'',Date:r.Date,'Document Number':r['Document Number'],Amount:fmtAmt?fmtAmt(r['Line Amount']):r['Line Amount']}))}
 function nsCustomerDetailTable(g){
-  const cols=['Entity','Branch','Location','Date','Document Number','Account','Category','Memo / Description','Debit','Credit','Line Amount','Credit - Debit'];
-  return '<div class="sc">'+tbl(g.lines,cols,{tot:['Debit','Credit','Line Amount','Credit - Debit'],max:3000})+'</div>';
+  return '<div class="sc">'+tbl(nsInvLite(g.lines),NS_INV_VIEW_COLS,{tot:['Amount'],max:3000})+'</div>';
 }
 function nsOpenCustomerDetailsInNewTab(){
   const groups=nsCustomerGroups(nsFiltered());
   const summaryCols=['Customer Name','Invoices','Locations','Branches','First Invoice Date','Last Invoice Date','Invoice Sales','Total Debit','Total Credit'];
   const summaries=groups.map(g=>({'Customer Name':g.name,Invoices:g.docs.size,Locations:g.locations.size,Branches:g.branches.size,'First Invoice Date':g.first,'Last Invoice Date':g.last,'Invoice Sales':g.sales,'Total Debit':g.debit,'Total Credit':g.credit}));
-  const table=(rows,cols)=>'<table><thead><tr>'+cols.map(c=>'<th>'+esc(c)+'</th>').join('')+'</tr></thead><tbody>'+rows.map(r=>'<tr>'+cols.map(c=>'<td>'+esc(r[c]==null?'':r[c])+'</td>').join('')+'</tr>').join('')+'</tbody></table>';
+  const table=(rows,cols)=>'<table><thead><tr>'+cols.map(c=>'<th>'+esc(c)+'</th>').join('')+'</tr></thead><tbody>'+rows.map(r=>'<tr>'+cols.map(c=>'<td>'+esc(nsFig(c,r[c]))+'</td>').join('')+'</tr>').join('')+'</tbody></table>';
   const w=window.open('','_blank');if(!w){addLog('Navigation','Customer Details','Blocked','Browser blocked the new tab. Allow pop-ups for this HTML file and try again.');msg('The browser blocked the new tab. Allow pop-ups and check Change Log.',true);return}
-  const full=groups.map(g=>'<h2>'+esc(g.name)+' — '+F2(g.sales)+'</h2>'+table(g.lines,['Entity','Branch','Location','Date','Document Number','Account','Category','Memo / Description','Debit','Credit','Line Amount','Credit - Debit'])).join('');
+  const full=groups.map(g=>'<h2>'+esc(g.name)+' — '+F2(g.sales)+'</h2>'+table(nsInvLite(g.lines,F2),NS_INV_VIEW_COLS)).join('');
   w.document.open();w.document.write('<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Home Bakery — Customer Details</title><style>body{font-family:Segoe UI,Arial,sans-serif;margin:24px;color:#1b2635}h1{font-size:24px}h2{font-size:17px;margin-top:26px}p{color:#586575}.actions{display:flex;gap:8px;flex-wrap:wrap;margin:14px 0}button{border:0;border-radius:6px;padding:10px 14px;background:#193b65;color:white;cursor:pointer}table{border-collapse:collapse;width:100%;font-size:12px;margin-bottom:18px}th,td{border:1px solid #d6dde7;padding:7px;text-align:left;vertical-align:top}th{background:#edf2f8}td{overflow-wrap:anywhere}.wrap{overflow:auto}@media print{.actions{display:none}}</style></head><body><h1>Home Bakery — Customer Details</h1><p>Customer summary followed by invoice sales lines. Customers: '+groups.length+'.</p><div class="actions"><button onclick="if(window.opener){window.opener.focus();window.close()}else{history.back()}">Back to Home Dashboard</button><button onclick="window.print()">Print / Save PDF</button></div><div class="wrap">'+table(summaries,summaryCols)+full+'</div></body></html>');w.document.close();
 }
 V.cust=()=>{
@@ -1803,7 +1837,7 @@ V.cat=()=>{
     <span class="note" style="margin:0">${rows.length} row(s)</span></div>`;
   if(!allL.length)return nsFilters()+nsEmpty();
   const help=mode==='entity'?'One row per Entity + Category across the selected dates. Percentages are calculated against that entity’s category net sales.':mode==='branch'?'One row per Entity + Branch + Location/Event + Category across the selected dates. Percentages are calculated against that branch/location’s category net sales.':'Detailed category rows by mapped entity, branch, location, date and account.';
-  return nsFilters()+`<div class="card"><h3>Category Analysis</h3><p class="note">Category is detected from the NetSuite Account heading. For example, <b>4001-0001 - Sales - Food</b> becomes <b>Food</b>, and <b>4001-0002 - Sales - Beverage</b> becomes <b>Beverage</b>. Account category mappings override automatic detection. ${help}</p>${controls}${rows.length?tbl(rows,cols,{tot:['Micros Sales','Invoice Sales','Gross Sales','Credit Memo Impact','Net Sales','Quantity'].filter(x=>CFG().showNetSales||x!=='Net Sales'),max:3000}):'<p class="em">No category rows match the current filters.</p>'}</div>`;
+  return nsFilters()+`<div class="card"><h3>Category Analysis</h3><p class="note">Category is detected from the NetSuite Account heading. For example, <b>4001-0001 - Sales - Food</b> becomes <b>Food</b>, and <b>4001-0002 - Sales - Beverage</b> becomes <b>Beverage</b>. Account category mappings override automatic detection. ${help}</p>${controls}${rows.length?tbl(rows,cols,{tot:['Micros Sales','Invoice Sales','Gross Sales','Credit Memo Impact','Net Sales','Quantity'].filter(x=>true||x!=='Net Sales'),max:3000}):'<p class="em">No category rows match the current filters.</p>'}</div>`;
 };
 V.map=()=>{const L=nsAll();const locs=new Map();L.forEach(r=>{if(!locs.has(norm(r.location)))locs.set(norm(r.location),{location:r.location})});Object.keys(maps).forEach(k=>{if(!locs.has(k))locs.set(k,{location:maps[k].raw||k})});mapKeys=[...locs.keys()].map((k,i)=>({k,raw:locs.get(k).location||k}));const rows=[...locs.values()].map((r,i)=>{const m=maps[norm(r.location)]||{};return {i,location:r.location,entity:m.entity||'',branch:m.branch||'',event:m.event||'',mapped:!!(m.entity&&m.branch&&ents[m.entity])}});const ar=nsAccounts();const entList=Object.keys(ents);return '<div class="card"><h3>Location Mapping</h3><p class="note">NetSuite <b>Location</b> is the mapping key. Export this workbook, edit Entity / Branch, then import the edited workbook to update existing mappings. Locations not included in the imported workbook are left unchanged. The same workbook can also update Account → Category mappings.</p><div class="row noprint"><button class="btn s xs" onclick="nsExportMapping()">Export Mapping Workbook</button><button class="btn s xs" onclick="$(\'#nsMappingFile\').click()">Import Edited Mapping</button><input type="file" id="nsMappingFile" accept=".xlsx,.xlsm,.xls,.csv,.txt" hidden onchange="nsImportMappingFile(this.files[0]);this.value=\'\'"><span class="note" style="margin:0">Re-upload updates mappings by Location / Account.</span></div><div class="sc"><table><thead><tr><th>Location</th><th>Entity</th><th>Branch</th><th></th><th>Status</th><th></th></tr></thead><tbody>'+rows.map((r,i)=>'<tr><td>'+esc(r.location)+'</td><td><select id="nse'+i+'"><option value="">Select</option>'+entList.map(e=>'<option value="'+esc(e)+'"'+(e===r.entity?' selected':'')+'>'+esc(e)+'</option>').join('')+'</select></td><td><select id="nsb'+i+'" onchange="const v=this.value;const e=$(\'#nse'+i+'\').value;const x=$(\'#nsv'+i+'\');x.disabled=v!==\'Events\';if(v!==\'Events\')x.value=\'\'">'+nsBrOpts(r.entity,r.branch)+'</select></td><td><input class="in" id="nsv'+i+'" value="'+esc(r.event)+'" placeholder="Event name" '+(r.branch==='Events'?'':'disabled')+'></td><td>'+(r.mapped?'<span class="bd ok">Mapped</span>':'<span class="bd">Unmapped</span>')+'</td><td><button class="btn xs" onclick="nsSaveLocation('+i+')">Save</button> <button class="btn s xs" onclick="nsResetLocation('+i+')">Reset</button></td></tr>').join('')+'</tbody></table></div></div>'+
 '<div class="card"><h3>Entities & Branches</h3><div class="row"><button class="btn s xs" onclick="nsAddEntity()">Add Entity</button><span class="note">Add branches using the selected entity:</span><select id="nsEntityAdd">'+entList.map(e=>'<option>'+esc(e)+'</option>').join('')+'</select><button class="btn s xs" onclick="nsAddBranch()">Add Branch</button></div><div class="sc"><table><thead><tr><th>Entity</th><th>Branches</th><th></th></tr></thead><tbody>'+entList.map((e,i)=>'<tr><td><b>'+esc(e)+'</b></td><td>'+esc((ents[e]||[]).join(', '))+'</td><td><button class="btn s xs" onclick="nsRenameEntity(\''+esc(e).replace(/'/g,"\\'")+'\')">Rename</button> <button class="btn d xs" onclick="nsDeleteEntity('+i+')">Delete</button></td></tr>').join('')+'</tbody></table></div></div>'+
@@ -1935,7 +1969,46 @@ touch=function(){nsPayloadPatch();nsOldTouch()};
 
 function sets(){const A=nsAll();const L=A.filter(r=>!r.skip);return [['Summary',nsSummaryRows(L),H.sum],['Report Register',nsRegisterRows(L),H.rep],['Journal Adjustments',nsJournalRows(L),H.adj],['Category Analysis',nsCategoryRows(L),H.cat],['NetSuite GL Transactions',nsGLRows(L),H.gl],['Location Mapping',nsMappingExportRows(),['Location','Entity','Branch','Event','Status']],['Account Category Mapping',nsMappingCategoryRows(),['Account','Category']],['Upload Log',logRows(),H.log]]}
 async function xl(){if(!reports.length){uiAlert('Upload NetSuite GL data first.');return}if(!window.XLSX){uiAlert('The Excel reader could not start. Please reload this HTML file.');return}const wb=XLSX.utils.book_new();sets().forEach(([n,rows,h])=>XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(rows,{header:h}),n.slice(0,31)));await XLSX.writeFile(wb,'Home_Bakery_NetSuite_Sales_Analysis.xlsx')}
-function nsDownloadTemplate(){if(!window.XLSX){uiAlert('The Excel writer is not available. Reload this HTML file.');return}const wb=XLSX.utils.book_new();const data=[{Date:'2026-10-01','Transaction Type':'Micros','Document Number':'MCR-0001',Location:'HB - Al Barsha',Account:'4001-0001 - Sales - Food',Category:'Food','Memo / Description':'Example Micros food sales',Debit:0,Credit:1000,Amount:'','Tax Amount':0,'Service Charge Amount':0,Name:'Walk-in',Quantity:1},{Date:'2026-10-01','Transaction Type':'Micros','Document Number':'MCR-0001',Location:'HB - Al Barsha',Account:'4001-0002 - Sales - Beverage',Category:'Beverage','Memo / Description':'Example Micros beverage sales',Debit:0,Credit:500,Amount:'','Tax Amount':0,'Service Charge Amount':0,Name:'Walk-in',Quantity:1},{Date:'2026-10-01','Transaction Type':'Invoice','Document Number':'INV-0001',Location:'HB - Al Barsha',Account:'4001-0001 - Sales - Food',Category:'Food','Memo / Description':'Example invoice',Debit:0,Credit:200,Amount:'','Tax Amount':0,'Service Charge Amount':0,Name:'Customer A',Quantity:1},{Date:'2026-10-01','Transaction Type':'Credit Memo','Document Number':'CM-0001',Location:'HB - Al Barsha',Account:'4001-0001 - Sales - Food',Category:'Food','Memo / Description':'Example sales reduction',Debit:50,Credit:0,Amount:'','Tax Amount':0,'Service Charge Amount':0,Name:'Customer A',Quantity:1},{Date:'2026-10-01','Transaction Type':'Journal','Document Number':'JE-0001',Location:'HB - Al Barsha',Account:'4001-0001 - Sales - Food',Category:'Food','Memo / Description':'Example journal adjustment',Debit:20,Credit:0,Amount:'','Tax Amount':0,'Service Charge Amount':0,Name:'',Quantity:0}];const ws=XLSX.utils.json_to_sheet(data,{header:H.gl});XLSX.utils.book_append_sheet(wb,ws,'NetSuite GL');const ins=[{Section:'Purpose',Details:'Upload one row per NetSuite GL line for Micros, Invoice, Credit Memo and Journal transactions.'},{Section:'Transaction Type',Details:'Use Micros, Invoice, Credit Memo or Journal.'},{Section:'Location',Details:'NetSuite Location is the mapping key. Map it to Entity / Branch in the application.'},{Section:'Name',Details:'Use NetSuite Name for the customer/entity name on invoice transactions. The app treats Name as Customer for Customer Details summary and invoice drill-down. Legacy Customer / Customer Name headers are also accepted.'},{Section:'Account',Details:'Keep the exact NetSuite account heading. Example: 4001-0001 - Sales - Food.'},{Section:'Category',Details:'Optional. The app automatically derives Food/Beverage/etc. from Account descriptions such as 4001-0001 - Sales - Food. Account Category Mapping can override this.'},{Section:'Debit / Credit',Details:'When Amount is blank, the application uses Credit minus Debit as the signed amount.'},{Section:'Amount',Details:'Optional signed amount. If populated, it takes priority over Credit minus Debit.'},{Section:'Credit Memo',Details:'Sales credit memo lines reduce Net Sales. Credit memo detail is not displayed on the dashboard.'},{Section:'Journal',Details:'Journal lines affecting Sales accounts are shown in Journal Adjustments and affect Net Sales.'},{Section:'Tax / Service Charge',Details:'Use Tax Amount and Service Charge Amount for dashboard VAT and service charge totals.'},{Section:'Important',Details:'Do not include subtotal or grand-total rows.'}];const wi=XLSX.utils.json_to_sheet(ins,{header:['Section','Details']});XLSX.utils.book_append_sheet(wb,wi,'Instructions');XLSX.writeFile(wb,'Home_Bakery_NetSuite_GL_Template.xlsx')}
+function nsDownloadTemplate(){if(!window.XLSX){uiAlert('The Excel writer is not available. Reload this HTML file.');return}const wb=XLSX.utils.book_new();const data=[{Date:'2026-10-01','Transaction Type':'Micros','Document Number':'MCR-0001',Location:'HB - Al Barsha',Account:'4001-0001 - Sales - Food',Category:'Food','Memo / Description':'Example Micros food sales',Debit:0,Credit:1000,'Tax Amount':0,'Service Charge Amount':0,Name:'Walk-in',Quantity:1},{Date:'2026-10-01','Transaction Type':'Micros','Document Number':'MCR-0001',Location:'HB - Al Barsha',Account:'4001-0002 - Sales - Beverage',Category:'Beverage','Memo / Description':'Example Micros beverage sales',Debit:0,Credit:500,'Tax Amount':0,'Service Charge Amount':0,Name:'Walk-in',Quantity:1},{Date:'2026-10-01','Transaction Type':'Invoice','Document Number':'INV-0001',Location:'HB - Al Barsha',Account:'4001-0001 - Sales - Food',Category:'Food','Memo / Description':'Example invoice',Debit:0,Credit:200,'Tax Amount':0,'Service Charge Amount':0,Name:'Customer A',Quantity:1},{Date:'2026-10-01','Transaction Type':'Credit Memo','Document Number':'CM-0001',Location:'HB - Al Barsha',Account:'4001-0001 - Sales - Food',Category:'Food','Memo / Description':'Example sales reduction',Debit:50,Credit:0,'Tax Amount':0,'Service Charge Amount':0,Name:'Customer A',Quantity:1},{Date:'2026-10-01','Transaction Type':'Journal','Document Number':'JE-0001',Location:'HB - Al Barsha',Account:'4001-0001 - Sales - Food',Category:'Food','Memo / Description':'Example journal adjustment',Debit:20,Credit:0,'Tax Amount':0,'Service Charge Amount':0,Name:'',Quantity:0}];const ws=XLSX.utils.json_to_sheet(data,{header:H.gl.filter(h=>h!=='Amount')});XLSX.utils.book_append_sheet(wb,ws,'NetSuite GL');const ins=[{Section:'Purpose',Details:'Upload one row per NetSuite GL line for Micros, Invoice, Credit Memo and Journal transactions.'},{Section:'Transaction Type',Details:'Use Micros, Invoice, Credit Memo or Journal.'},{Section:'Location',Details:'NetSuite Location is the mapping key. Map it to Entity / Branch in the application.'},{Section:'Name',Details:'Use NetSuite Name for the customer/entity name on invoice transactions. The app treats Name as Customer for Customer Details summary and invoice drill-down. Legacy Customer / Customer Name headers are also accepted.'},{Section:'Account',Details:'Keep the exact NetSuite account heading. Example: 4001-0001 - Sales - Food.'},{Section:'Category',Details:'Optional. The app automatically derives Food/Beverage/etc. from Account descriptions such as 4001-0001 - Sales - Food. Account Category Mapping can override this.'},{Section:'Debit / Credit',Details:'The application uses Credit minus Debit as the signed amount.'},{Section:'Credit Memo',Details:'Sales credit memo lines reduce Net Sales. Credit memo detail is not displayed on the dashboard.'},{Section:'Journal',Details:'Journal lines affecting Sales accounts are shown in Journal Adjustments and affect Net Sales.'},{Section:'Tax / Service Charge',Details:'Use Tax Amount and Service Charge Amount for dashboard VAT and service charge totals.'},{Section:'Important',Details:'Do not include subtotal or grand-total rows.'}];const wi=XLSX.utils.json_to_sheet(ins,{header:['Section','Details']});XLSX.utils.book_append_sheet(wb,wi,'Instructions');XLSX.writeFile(wb,'Home_Bakery_NetSuite_GL_Template.xlsx')}
+
+
+/* ===== Smart upload router: every supported file type is recognised, on manual upload and on the reports source folder ===== */
+function nsBudgetLooksLike(rows){for(const row of (rows||[]).slice(0,12)){const h=(row||[]).map(v=>String(v==null?'':v).trim().toLowerCase());if(h.includes('entity')&&h.includes('branch')&&h.some(x=>/^(jan|january)\b/.test(x)))return true}return false}
+async function nsClassifyFile(f){
+  try{
+    const name=f.name||'';
+    if(/\.(xlsx|xlsm|xls)$/i.test(name)){
+      const wb=await XLSX.read(new Uint8Array(await f.arrayBuffer()),{type:'array',cellDates:true,sheetRows:60});
+      const names=wb.SheetNames||[];
+      if(names.some(n=>/branch budget/i.test(String(n))))return 'budget';
+      if(nsHeader(nsRowsFromWorkbook(wb)))return 'gl';
+      for(const n of names){const rows=XLSX.utils.sheet_to_json(wb.Sheets[n],{header:1,raw:true,defval:'',blankrows:false});if(nsBudgetLooksLike(rows))return 'budget';if(nsMappingHeader(rows))return 'mapping'}
+      return 'gl';
+    }
+    const rows=nsRowsFromText((await f.text()).slice(0,300000));
+    if(nsHeader(rows))return 'gl';if(nsBudgetLooksLike(rows))return 'budget';if(nsMappingHeader(rows))return 'mapping';
+    return 'gl';
+  }catch(e){return 'gl'}
+}
+async function nsRouteFiles(files,opt){
+  files=[...files];if(!files.length||!can(2))return [];
+  const kinds=[];for(const f of files)kinds.push(await nsClassifyFile(f));
+  const out=new Array(files.length);
+  for(const kind of ['mapping','budget']){
+    for(let i=0;i<files.length;i++){
+      if(kinds[i]!==kind)continue;
+      const f=files[i],n0=ulog.length;
+      try{if(kind==='mapping')await nsImportMappingFile(f);else await nsBudgetImportFile(f)}catch(e){addLog(kind==='mapping'?'Mapping Import':'Budget Import',f.name,'Failed',String(e&&e.message||e))}
+      const bad=ulog.slice(n0).find(x=>x.file===f.name&&/fail/i.test(String(x.status)));
+      out[i]=bad?{name:f.name,ok:false,err:String(bad.detail||'failed'),kind}:{name:f.name,ok:true,kind};
+    }
+  }
+  const gi=[];kinds.forEach((k,i)=>{if(k==='gl')gi.push(i)});
+  if(gi.length){const res=(await nsHandle(gi.map(i=>files[i]),opt))||[];gi.forEach((i,j)=>{out[i]=Object.assign({kind:'gl'},res[j]||{name:files[i].name,ok:false,err:'not processed'})})}
+  else{changed();render()}
+  return out;
+}
+handle=async function(files,opt){return nsRouteFiles(files,opt)};
 
 // Make the upload/source wording consistent with the new model.
 const netSourceMessage=()=>{const e=$('#st');if(e&&!reports.length)e.textContent='No NetSuite GL data uploaded yet. Use GL Template for the required format.'};
@@ -1944,17 +2017,17 @@ fetchSource=async function(auto,rescan){
   if(!can(2)||!dirs.src)return;const d=dirs.src;
   try{
     let p=await d.queryPermission({mode:'read'});
-    if(p!=='granted'){if(auto){const m='The NetSuite GL source folder needs permission. Press Refresh Data once to allow it.';msg(m);addLog('Source Folder',d.name,'Permission Required',m);return}p=await d.requestPermission({mode:'read'})}
+    if(p!=='granted'){if(auto){const m='The Reports source folder needs permission. Press Refresh Data once to allow it.';msg(m);addLog('Source Folder',d.name,'Permission Required',m);return}p=await d.requestPermission({mode:'read'})}
     if(p!=='granted')throw new Error('permission denied');
     if(rescan)SV('hbk_srcseen',{});const seen=LS('hbk_srcseen')||{},files=[];let total=0;
-    for await(const [path,h2,base] of walk(d,3,'')){if(!/\.(csv|xlsx|xlsm|xls)$/i.test(base))continue;total++;const f=await h2.getFile(),sig=path+'|'+f.size+'|'+f.lastModified;if(seen[sig])continue;files.push({f,sig,path})}
-    if(!files.length){const m='NetSuite GL source folder "'+d.name+'": nothing new ('+total+' file(s) checked).';msg(m,false);addLog('Source Folder',d.name,'No New Files',m);return}
+    for await(const [path,h2,base] of walk(d,6,'')){if(!/\.(csv|txt|xlsx|xlsm|xls)$/i.test(base)||/^~\$/.test(base))continue;total++;const f=await h2.getFile(),sig=path+'|'+f.size+'|'+f.lastModified;if(seen[sig])continue;files.push({f,sig,path})}
+    if(!files.length){const m='Reports source folder "'+d.name+'": nothing new ('+total+' file(s) checked).';msg(m,false);addLog('Source Folder',d.name,'No New Files',m);return}
     const out=await handle(files.map(x=>x.f),{quiet:true});
     files.forEach((x,i)=>{if(out[i]&&out[i].ok)seen[x.sig]=1});SV('hbk_srcseen',seen);
-    const good=out.filter(x=>x.ok),bad=out.filter(x=>!x.ok),detail='Scanned '+files.length+' new file(s); '+good.length+' loaded; '+bad.length+' failed.'+(bad.length?' Failed files remain eligible for retry. Details: '+bad.map(x=>x.name+' ('+x.err+')').join(' | '):'');
-    secLog('Source',bad.length?'Failed':'Saved','Read '+good.length+' NetSuite GL file(s) from "'+d.name+'"'+(bad.length?'; skipped '+bad.length+': '+bad.map(x=>x.name+' ('+x.err+')').join(', '):''));
-    addLog('Source Folder',d.name,bad.length?'Completed with errors':'Completed',detail);msg('Fetched '+good.length+' NetSuite GL file(s) from "'+d.name+'". '+(bad.length?bad.length+' file(s) failed; see Change Log.':'See Change Log for details.'),!!bad.length);
-  }catch(e){const m='NetSuite GL source folder: '+(fsErr(e)||e.message);msg(m,true);addLog('Source Folder',d.name,'Failed',m);secLog('Source','Failed',m)}
+    const good=out.filter(x=>x.ok),bad=out.filter(x=>!x.ok),detail='Scanned '+files.length+' new file(s); '+good.length+' loaded (GL, budget, mapping and other supported files); '+bad.length+' failed.'+(bad.length?' Failed files remain eligible for retry. Details: '+bad.map(x=>x.name+' ('+x.err+')').join(' | '):'');
+    secLog('Source',bad.length?'Failed':'Saved','Read '+good.length+' file(s) from "'+d.name+'"'+(bad.length?'; skipped '+bad.length+': '+bad.map(x=>x.name+' ('+x.err+')').join(', '):''));
+    addLog('Source Folder',d.name,bad.length?'Completed with errors':'Completed',detail);msg('Fetched '+good.length+' file(s) from "'+d.name+'". '+(bad.length?bad.length+' file(s) failed; see Change Log.':'See Change Log for details.'),!!bad.length);
+  }catch(e){const m='Reports source folder: '+(fsErr(e)||e.message);msg(m,true);addLog('Source Folder',d.name,'Failed',m);secLog('Source','Failed',m)}
 };
 
 
@@ -2358,7 +2431,7 @@ nsCategoryRows = function(L){
   const out=[];(L||[]).forEach(r=>(r.cats||[]).forEach(c=>out.push({Entity:r.ent,Branch:r.br,Location:r.ev,Date:r.from,Account:c.account,Category:c.category,'Micros Sales':r2(c.micros||0),'Invoice Sales':r2(c.invoice||0),'Gross Sales':r2(c.gross||0),'Credit Memo Impact':r2(c.cm||0),'Journal Adjustments':r2(c.journal||0),'Sales Account Credit':r2(c.credit||0),'Sales Account Debit':r2(c.debit||0),'Net Sales':r2(c.net||0),Quantity:r2(c.qty||0),'% of Net Sales':pct(c.net||0,r.net||0)})));
   return out;
 };
-nsVisibleCols = function(cols){return CFG().showNetSales?cols.slice():cols.filter(c=>c!=='Net Sales'&&!/^% of .*Net Sales$/.test(c))};
+nsVisibleCols = function(cols){return true?cols.slice():cols.filter(c=>c!=='Net Sales'&&!/^% of .*Net Sales$/.test(c))};
 nsCategorySummaryRows = function(L,mode){
   const all=nsCategoryRows(L),groups=new Map(),parents=new Map(),isEntity=mode==='entity';
   all.forEach(r=>{
@@ -2407,13 +2480,13 @@ function nsV2DataQualityRows(L){
   const logs=(typeof logRows==='function'?logRows():[]).slice().sort((a,b)=>String(b.Time||'').localeCompare(String(a.Time||'')));
   const failed=logs.filter(x=>/fail|error|invalid|with errors/i.test(String(x.Status||'')+' '+String(x.Detail||''))).length;
   return [
-    {Metric:'NetSuite GL lines loaded',Value:lines.length,Details:'All transaction lines retained, including non-sales accounts for audit.'},
-    {Metric:'Sales-account lines included in Net Sales',Value:sales.length,Details:'Only accounts identified as sales accounts contribute to Net Sales.'},
-    {Metric:'Non-sales GL lines excluded from Net Sales',Value:other.length,Details:'Cash, receivables, tax and other balancing accounts remain in GL details and total Credit / Debit.'},
-    {Metric:'Unmapped NetSuite locations',Value:unmapped.length,Details:unmapped.slice(0,30).join(', ')||'All imported locations are mapped, or no data is in scope.'},
-    {Metric:'Sales accounts with unmapped category',Value:noCategory.length,Details:noCategory.join(', ')||'No unclassified sales accounts.'},
-    {Metric:'Invoice sales lines missing customer Name',Value:missingCustomer,Details:'Populate NetSuite Name to improve customer summaries.'},
-    {Metric:'Logged failed / invalid imports',Value:failed,Details:'See Change Log for file-by-file upload errors.'}
+    {Metric:'NetSuite GL lines loaded',Value:F0(lines.length),Details:'All transaction lines retained, including non-sales accounts for audit.'},
+    {Metric:'Sales-account lines included in Net Sales',Value:F0(sales.length),Details:'Only accounts identified as sales accounts contribute to Net Sales.'},
+    {Metric:'Non-sales GL lines excluded from Net Sales',Value:F0(other.length),Details:'Cash, receivables, tax and other balancing accounts remain in GL details and total Credit / Debit.'},
+    {Metric:'Unmapped NetSuite locations',Value:F0(unmapped.length),Details:unmapped.slice(0,30).join(', ')||'All imported locations are mapped, or no data is in scope.'},
+    {Metric:'Sales accounts with unmapped category',Value:F0(noCategory.length),Details:noCategory.join(', ')||'No unclassified sales accounts.'},
+    {Metric:'Invoice sales lines missing customer Name',Value:F0(missingCustomer),Details:'Populate NetSuite Name to improve customer summaries.'},
+    {Metric:'Logged failed / invalid imports',Value:F0(failed),Details:'See Change Log for file-by-file upload errors.'}
   ];
 }
 function nsV2QualityPanel(L){
@@ -2509,28 +2582,28 @@ nsManagementSummary = function(selectedRows){
 };
 
 /* Dashboard: restrained executive KPI layout, transparent accounting note, quality panel and drill-throughs. */
-function nsV2ClickableKpi(label,value,detail,type){return '<div class="k ns-clickkpi" role="button" tabindex="0" title="Click to inspect underlying GL lines" onclick="nsOpenGLDetail(\'\',\'\',\'\',\'\',\''+(type||'sales')+'\')" onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();nsOpenGLDetail(\'\',\'\',\'\',\'\',\''+(type||'sales')+'\')}"><small>'+esc(label)+'</small><b>'+value+'</b><i>'+esc(detail||'Click to investigate GL detail')+'</i></div>'}
+function nsV2ClickableKpi(label,value,detail,type){if(me&&me.role==='viewer')return '<div class="k"><small>'+esc(label)+'</small><b>'+value+'</b></div>';return '<div class="k ns-clickkpi" role="button" tabindex="0" title="Click to inspect underlying GL lines" onclick="nsOpenGLDetail(\'\',\'\',\'\',\'\',\''+(type||'sales')+'\')" onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();nsOpenGLDetail(\'\',\'\',\'\',\'\',\''+(type||'sales')+'\')}"><small>'+esc(label)+'</small><b>'+value+'</b><i>'+esc(detail||'Click to investigate GL detail')+'</i></div>'}
 function nsV2RenderDashboard(){
   const L=nsFiltered(),mgPool=nsBaseFiltered(),s=nsSum(L),entities=['HB','HBK','LG'];
   if(!L.length)return nsFilters()+nsEmpty();
   const un=new Set(L.filter(r=>!r.mapped).map(r=>norm(r.location||'')).filter(Boolean)).size;
-  const locations=new Set(L.map(r=>norm(r.location||r.ev||'')).filter(Boolean)).size;
+  const locations=new Set(L.filter(r=>(CFG().countEvents||r.br!=='Events')).map(r=>norm(r.location||r.ev||'')).filter(Boolean)).size;
   const branches=new Set(L.filter(r=>r.mapped&&r.br!=='Events'&&!/^Unmapped/.test(r.br||'')).map(r=>nsEntityCode(r.ent)+'|'+r.br)).size;
   const entCount=new Set(L.filter(r=>r.mapped).map(r=>nsEntityCode(r.ent))).size;
   const minDate=L.map(r=>r.from).filter(Boolean).sort()[0],maxDate=L.map(r=>r.from).filter(Boolean).sort().slice(-1)[0];
   const reportDates=minDate?(minDate===maxDate?dfmt(minDate):dfmt(minDate)+' – '+dfmt(maxDate)):'No dates';
   const reg='<div class="card noprint ns-entity-switch"><div class="row" style="align-items:center;gap:8px"><b style="margin-right:4px">Entity:</b>'+entities.map(e=>'<button class="btn '+(dashRegion===e?'':'s ')+'xs" onclick="setDashRegion(\''+e+'\')">'+e+'</button>').join('')+(dashRegion?'<button class="btn d xs" onclick="setDashRegion(\''+dashRegion+'\')">Clear entity</button>':'<span class="note">All entities</span>')+'</div></div>';
-  const avgCards=entities.map(code=>{const rows=mgPool.filter(r=>r.mapped&&nsEntityCode(r.ent)===code),locs=new Set(rows.map(r=>norm(r.location||r.ev||'')).filter(Boolean)),total=rows.reduce((a,r)=>a+(Number(r.net)||0),0);return kpi('Avg Net Sales / Location · '+code,locs.size?F2(total/locs.size):'—',F0(locs.size)+' location(s)')}).join('');
+  const avgCards=entities.map(code=>{const rows=mgPool.filter(r=>r.mapped&&(CFG().countEvents||r.br!=='Events')&&nsEntityCode(r.ent)===code),locs=new Set(rows.map(r=>norm(r.location||r.ev||'')).filter(Boolean)),total=rows.reduce((a,r)=>a+(Number(r.net)||0),0);return kpi('Avg Net Sales / Location · '+code,locs.size?F2(total/locs.size):'—',F0(locs.size)+' location(s)')}).join('');
   const piePart=W('pie')?pie('Net Sales by Entity',agg(L.filter(r=>r.mapped),r=>nsEntityCode(r.ent),r=>r.net),flt.ent):'';
-  const branchPart=W('branch')?bars('Net Sales by Branch',agg(L.filter(r=>r.mapped),r=>r.ent+' / '+r.br,r=>r.net)):'';
+  const branchPart=W('branch')?bars('Net Sales by Branch',agg(L.filter(r=>r.mapped&&(CFG().countEvents||r.br!=='Events')),r=>r.ent+' / '+r.br,r=>r.net)):'';
   const monthlyLine=W('month')?nsMonthlyEntityLineChart(mgPool):'';
-  const locationPart=W('event')?bars('Net Sales by Location',agg(L.filter(r=>r.mapped),r=>r.location||r.ev,r=>r.net)):'';
+  const locationPart=W('event')?bars('Net Sales by Location',agg(L.filter(r=>r.mapped&&(CFG().countEvents||r.br!=='Events')),r=>r.location||r.ev,r=>r.net)):'';
   const monthPart=W('month')?bars('Net Sales by Month',agg(L.filter(r=>r.mapped),r=>String(r.from||'').slice(0,7),r=>r.net),{asc:1}):'';
   const catAgg=agg(nsCategoryRows(L.filter(r=>r.mapped)),r=>r.Category,r=>r['Net Sales']);
   const catPart=W('category')?bars('Net Sales by Category',catAgg):'';
-  const kpis=W('kpi')?'<div class="grid ns-kpi-grid">'+kpi('Micros Sales',F2(s.micros),'Sales-account lines only')+nsInvoiceKpi(F2(s.invoice))+kpi('Gross Sales',F2(s.gross),'Micros + Invoice sales')+(CFG().showNetSales?nsV2ClickableKpi('Net Sales',F2(s.net),'Credit − Debit on sales accounts','sales'):'')+kpi('Credit Memo Impact',F2(s.cm),'Sales account impact')+kpi('Journal Adjustments',F2(s.journal),'Sales accounts only')+kpi('Total GL Credit',F2(s.credit),'All GL accounts')+kpi('Total GL Debit',F2(s.debit),'All GL accounts')+kpi('Locations',F0(locations))+kpi('Branches',F0(branches))+kpi('Entities',F0(entCount))+kpi('Report Dates','<span style="font-size:14px">'+esc(reportDates)+'</span>')+'</div><div class="grid" style="margin-top:10px">'+avgCards+'</div>':'';
+  const kpis=W('kpi')?'<div class="grid ns-kpi-grid">'+kpi('Micros Sales',F2(s.micros),'Sales-account lines only')+nsInvoiceKpi(F2(s.invoice))+kpi('Gross Sales',F2(s.gross),'Micros + Invoice sales')+(true?nsV2ClickableKpi('Net Sales',F2(s.net),'Credit − Debit on sales accounts','sales'):'')+kpi('Credit Memo Impact',F2(s.cm),'Sales account impact')+kpi('Journal Adjustments',F2(s.journal),'Sales accounts only')+kpi('Total GL Credit',F2(s.credit),'All GL accounts')+kpi('Total GL Debit',F2(s.debit),'All GL accounts')+kpi('Locations',F0(locations))+kpi('Branches',F0(branches))+kpi('Entities',F0(entCount))+kpi('Report Dates','<span style="font-size:14px">'+esc(reportDates)+'</span>')+'</div><div class="grid" style="margin-top:10px">'+avgCards+'</div>':'';
   const note=''; // Keep the dashboard clean; calculation details remain available in GL / Logs.
-  return nsFilters()+reg+note+(un?'<div class="ban">'+F0(un)+' NetSuite location(s) are unmapped. Map Location to Entity / Branch to include them in entity and branch analysis.</div>':'')+kpis+'<div class="g2">'+(piePart||'')+branchPart+'</div><div class="g2">'+monthlyLine+locationPart+'</div><div class="g2">'+monthPart+catPart+'</div>'+nsManagementSummary(mgPool);
+  return nsFilters()+reg+note+(un&&can(2)?'<div class="ban">'+F0(un)+' NetSuite location(s) are unmapped. Map Location to Entity / Branch to include them in entity and branch analysis.</div>':'')+kpis+'<div class="g2">'+(piePart||'')+branchPart+'</div><div class="g2">'+monthlyLine+locationPart+'</div><div class="g2">'+monthPart+catPart+'</div>'+nsManagementSummary(mgPool);
 }
 V.dash=nsV2RenderDashboard;
 
@@ -2837,7 +2910,7 @@ V.cust=function(){
   const totalSales=groups.reduce((s,g)=>s+g.sales,0),totalInvoiceDocs=groups.reduce((s,g)=>s+g.docs.size,0);
   const search='<div class="row noprint" style="align-items:end;gap:8px;flex-wrap:wrap"><label>Search customer<input class="in" id="nsCustomerSearch" type="search" value="'+esc(nsCustomerSearchText)+'" placeholder="Enter customer name" onkeydown="if(event.key===\'Enter\'){event.preventDefault();nsApplyCustomerSearch()}"></label><button class="btn xs" onclick="nsApplyCustomerSearch()">Search</button><button class="btn s xs" onclick="nsClearCustomerSearch()">Clear Search</button><button class="btn s xs" onclick="nsShowAllInvoiceLines=!nsShowAllInvoiceLines;render()">'+(nsShowAllInvoiceLines?'Hide all invoice lines':'Show all invoice lines')+'</button><button class="btn s xs" onclick="nsOpenCustomerDetailsInNewTab()">Open Customer Report in New Tab</button><button class="btn s xs" onclick="window.print()">Print / Save PDF</button></div>';
   const invoiceRows=nsInvoiceDetailRows(nsFiltered()).filter(x=>!q||String(x.Name||'').toLocaleLowerCase().includes(q));
-  return nsFilters()+'<div class="card"><div class="row" style="justify-content:space-between;align-items:center"><div><h3 style="margin:0">Customers &amp; Invoice Details</h3><p class="note" style="margin:4px 0 0">Customer comes from NetSuite Name (or the legacy Customer / Customer Name column). Expand any customer for that customer’s invoice lines.</p></div><button class="btn s xs noprint" onclick="tab=\'dash\';render();window.scrollTo(0,0)">Back to Dashboard</button></div>'+search+'<div class="grid" style="margin:12px 0">'+kpi('Customers',F0(groups.length))+kpi('Invoices',F0(totalInvoiceDocs))+kpi('Invoice Sales',F2(totalSales))+'</div><div class="sc"><table><thead><tr>'+summaryCols.map(c=>'<th>'+esc(c)+'</th>').join('')+'<th class="noprint">Details</th></tr></thead><tbody>'+(rows.length?rows.join(''):'<tr><td colspan="10">No customers match the search or current filters.</td></tr>')+'</tbody></table></div>'+(nsShowAllInvoiceLines?'<div class="card"><h3>All Invoice Lines'+(q?' — Search filtered':'')+'</h3><p class="note">Complete invoice line details for the current dashboard filters.</p>'+(invoiceRows.length?tbl(invoiceRows,H.inv,{tot:['Debit','Credit','Line Amount','Credit - Debit'],max:5000}):'<p class="em">No invoice lines matched.</p>')+'</div>':'')+'</div>';
+  return nsFilters()+'<div class="card"><div class="row" style="justify-content:space-between;align-items:center"><div><h3 style="margin:0">Customers &amp; Invoice Details</h3><p class="note" style="margin:4px 0 0">Customer comes from NetSuite Name (or the legacy Customer / Customer Name column). Expand any customer for that customer’s invoice lines.</p></div><button class="btn s xs noprint" onclick="tab=\'dash\';render();window.scrollTo(0,0)">Back to Dashboard</button></div>'+search+'<div class="grid" style="margin:12px 0">'+kpi('Customers',F0(groups.length))+kpi('Invoices',F0(totalInvoiceDocs))+kpi('Invoice Sales',F2(totalSales))+'</div><div class="sc"><table><thead><tr>'+summaryCols.map(c=>'<th>'+esc(c)+'</th>').join('')+'<th class="noprint">Details</th></tr></thead><tbody>'+(rows.length?rows.join(''):'<tr><td colspan="10">No customers match the search or current filters.</td></tr>')+'</tbody></table></div>'+(nsShowAllInvoiceLines?'<div class="card"><h3>All Invoice Lines'+(q?' — Search filtered':'')+'</h3><p class="note">Complete invoice line details for the current dashboard filters.</p>'+(invoiceRows.length?tbl(nsInvLite(invoiceRows),NS_INV_VIEW_COLS,{tot:['Amount'],max:5000}):'<p class="em">No invoice lines matched.</p>')+'</div>':'')+'</div>';
 };
 
 /* Comparison ranges: selectable first day of week and Week / Month / Quarter / Half-year comparisons. */
@@ -2901,8 +2974,8 @@ nsOpenCustomerDetailsInNewTab=function(){
   const q=String(nsCustomerSearchText||'').toLocaleLowerCase(),groups=nsCustomerGroups(nsFiltered()).filter(g=>!q||String(g.name||'').toLocaleLowerCase().includes(q));
   const summaryCols=['Customer Name','Invoices','Locations','Branches','First Invoice Date','Last Invoice Date','Invoice Sales','Total Debit','Total Credit'];
   const summaries=groups.map(g=>({'Customer Name':g.name,Invoices:g.docs.size,Locations:g.locations.size,Branches:g.branches.size,'First Invoice Date':g.first,'Last Invoice Date':g.last,'Invoice Sales':g.sales,'Total Debit':g.debit,'Total Credit':g.credit}));
-  const table=(rows,cols)=>'<table><thead><tr>'+cols.map(c=>'<th>'+esc(c)+'</th>').join('')+'</tr></thead><tbody>'+rows.map(r=>'<tr>'+cols.map(c=>'<td>'+esc(r[c]==null?'':r[c])+'</td>').join('')+'</tr>').join('')+'</tbody></table>';
-  const full=groups.map(g=>'<h2>'+esc(g.name)+' — '+F2(g.sales)+'</h2>'+table(g.lines,['Entity','Branch','Location','Date','Document Number','Account','Category','Memo / Description','Debit','Credit','Line Amount','Credit - Debit'])).join('');
+  const table=(rows,cols)=>'<table><thead><tr>'+cols.map(c=>'<th>'+esc(c)+'</th>').join('')+'</tr></thead><tbody>'+rows.map(r=>'<tr>'+cols.map(c=>'<td>'+esc(nsFig(c,r[c]))+'</td>').join('')+'</tr>').join('')+'</tbody></table>';
+  const full=groups.map(g=>'<h2>'+esc(g.name)+' — '+F2(g.sales)+'</h2>'+table(nsInvLite(g.lines,F2),NS_INV_VIEW_COLS)).join('');
   const html='<!doctype html><html><head><meta charset="utf-8"><title>Home Bakery — Customers & Invoices</title><style>body{font-family:Segoe UI,Arial,sans-serif;margin:22px;color:#172538}h1,h2{color:#17365d}table{border-collapse:collapse;width:100%;font-size:10px;margin:12px 0 22px}td,th{border:1px solid #d5deea;padding:5px;text-align:left;vertical-align:top;overflow-wrap:anywhere}th{background:#eaf0f7}.actions{margin-bottom:12px}@page{size:A4 landscape;margin:10mm}@media print{.actions,button,.noprint{display:none!important}body{margin:0}th{-webkit-print-color-adjust:exact;print-color-adjust:exact}tr{break-inside:avoid}}</style></head><body><div class="actions"><button onclick="window.print()">Print / Save PDF</button><button onclick="if(window.opener){window.opener.focus();window.close()}else{history.back()}">Back</button></div><h1>Customers & Invoice Details</h1><p>Filtered customer list · '+groups.length+' customer(s)</p>'+table(summaries,summaryCols)+full+'</body></html>';
   const w=window.open('','_blank');if(!w){dl('Home_Bakery_Customer_Invoice_Report.html',new Blob([html],{type:'text/html;charset=utf-8'}));addLog('Navigation','Customer Report','Popup blocked','Downloaded printable HTML report instead.');msg('Popup blocked. A printable customer report was downloaded.',true);return}
   w.document.open();w.document.write(html);w.document.close();addLog('Navigation','Customer Report','Opened',groups.length+' customer(s)');
@@ -2936,7 +3009,7 @@ V.apr=function(){
     return '<tr><td><b>'+esc(base)+'</b><div class="note">'+esc(k)+'</div></td><td><input class="in" id="ns-tab-name-'+k+'" value="'+esc(custom)+'" aria-label="Tab label" /></td><td><select aria-label="Tab position" onchange="nsSetTabPosition(\''+k+'\',this.value)">'+order.map((x,j)=>'<option value="'+(j+1)+'"'+(x===k?' selected':'')+'>'+(j+1)+'</option>').join('')+'</select></td><td><label><input type="checkbox" '+(viewerShow?'checked':'')+' onchange="nsSetViewerTab(\''+k+'\',this.checked)"> Show</label></td><td>'+ (canGlobHide?'<label><input type="checkbox" '+(globShow?'checked':'')+' onchange="nsSetGlobalTab(\''+k+'\',this.checked)"> Show</label>':'Always on')+'</td><td><button class="btn s xs" onclick="nsSetTabLabel(\''+k+'\')">Save name</button></td></tr>';
   }).join('');
   const chk=(id,label)=>'<label style="display:block;margin:6px 0"><input type="checkbox" '+((c.hideWidgets||[]).includes(id)?'':'checked')+' onchange="setCfg(\'hideWidgets\',CFG().hideWidgets.includes(\''+id+'\')?CFG().hideWidgets.filter(x=>x!==\''+id+'\'):CFG().hideWidgets.concat(\''+id+'\'))"> '+label+'</label>';
-  return '<div class="card"><h3>Appearance</h3><p class="note">Changes are saved in the shared data package. Use Share &amp; Backup → Publish so other users receive them. You can control viewer tab visibility separately from the tabs visible to administrators.</p><div class="row"><span class="note">Body font:</span>'+nsFontSelect()+'<span class="note">Heading font:</span>'+nsHeadingFontSelect()+'<span class="note">Text size:</span><select onchange="setCfg(\'size\',this.value)">'+[['small','Small'],['normal','Normal'],['large','Large']].map(x=>'<option value="'+x[0]+'"'+(c.size===x[0]?' selected':'')+'>'+x[1]+'</option>').join('')+'</select><span class="note">Heading spacing:</span><select onchange="setCfg(\'track\',this.value)">'+[['wide','Wide'],['normal','Normal']].map(x=>'<option value="'+x[0]+'"'+(c.track===x[0]?' selected':'')+'>'+x[1]+'</option>').join('')+'</select></div><label style="display:block;margin:12px 0"><input type="checkbox" '+(c.showNetSales?'checked':'')+' onchange="setCfg(\'showNetSales\',this.checked)"> Show Net Sales figures</label><div class="row"><label>Main colour <input type="color" value="'+esc(c.brand)+'" onchange="setCfg(\'brand\',this.value)"></label><label>Accent colour <input type="color" value="'+esc(c.acc)+'" onchange="setCfg(\'acc\',this.value)"></label><label>Page background <input type="color" value="'+esc(c.bg)+'" onchange="setCfg(\'bg\',this.value)"></label></div></div>'+
+  return '<div class="card"><h3>Appearance</h3><p class="note">Changes are saved in the shared data package. Use Share &amp; Backup → Publish so other users receive them. You can control viewer tab visibility separately from the tabs visible to administrators.</p><div class="row"><span class="note">Body font:</span>'+nsFontSelect()+'<span class="note">Heading font:</span>'+nsHeadingFontSelect()+'<span class="note">Text size:</span><select onchange="setCfg(\'size\',this.value)">'+[['small','Small'],['normal','Normal'],['large','Large']].map(x=>'<option value="'+x[0]+'"'+(c.size===x[0]?' selected':'')+'>'+x[1]+'</option>').join('')+'</select><span class="note">Heading spacing:</span><select onchange="setCfg(\'track\',this.value)">'+[['wide','Wide'],['normal','Normal']].map(x=>'<option value="'+x[0]+'"'+(c.track===x[0]?' selected':'')+'>'+x[1]+'</option>').join('')+'</select></div><p class="note" style="margin:12px 0">Net Sales is visible to all users. Other dashboard components follow the Viewer / Editor visibility settings below.</p><label style="display:block;margin:12px 0"><input type="checkbox" '+(c.countEvents?'checked':'')+' onchange="setCfg(\'countEvents\',this.checked)"> Count Events as a branch / location (off = events are left out of branch and location counts and charts)</label><div class="row"><label>Main colour <input type="color" value="'+esc(c.brand)+'" onchange="setCfg(\'brand\',this.value)"></label><label>Accent colour <input type="color" value="'+esc(c.acc)+'" onchange="setCfg(\'acc\',this.value)"></label><label>Page background <input type="color" value="'+esc(c.bg)+'" onchange="setCfg(\'bg\',this.value)"></label></div></div>'+
   '<div class="card"><h3>Viewer access and tab layout</h3><p class="note">Use the position selector to move existing tabs. Edit the display name and click Save name. “Viewer: Show” controls whether viewer-role users can see each tab. “All users: Show” hides or shows eligible tabs globally. Dashboard, Share &amp; Backup, Users and Appearance retain their protected access rules. This controls existing features; brand-new functionality still needs to be added to the HTML first.</p><div class="sc"><table><thead><tr><th>Tab / key</th><th>Display name</th><th>Position</th><th>Viewer: Show</th><th>All users: Show</th><th></th></tr></thead><tbody>'+viewerRows+'</tbody></table></div><div class="row noprint"><button class="btn s xs" onclick="pkg.cfg=Object.assign({},pkg.cfg||{},{tabNames:{},tabOrder:nsTabKeys(),viewerHideTabs:[\'map\',\'log\']});touch();render()">Reset tab layout / viewer defaults</button></div></div>'+
   '<div class="card"><h3>Dashboard items</h3><p class="note">Select dashboard components to show.</p>'+chk('kpi','KPI cards')+chk('pie','Entity chart')+chk('branch','Sales by Branch')+chk('event','Sales by Location')+chk('date','Sales by Date')+chk('month','Monthly Net Sales trend')+chk('category','Category Sales')+'</div>';
 };
@@ -2974,10 +3047,10 @@ nsShowCustomerDetails=function(){tab='cust';nsShowAllInvoiceLines=false;nsExpand
     a.forEach(r=>{
       const e=nsEntityCode(r.ent),v=Number(r.net)||0,br=String(r.br||''),loc=String(r.location||r.ev||'');
       entTotals.set(e,(entTotals.get(e)||0)+v);
-      if(br&&br!=='Events'&&!/^Unmapped/i.test(br)){
+      if(br&&(CFG().countEvents||br!=='Events')&&!/^Unmapped/i.test(br)){
         const bk=e+'|'+br;brTotals.set(bk,(brTotals.get(bk)||0)+v);
       }
-      if(loc&&br!=='Events'){
+      if(loc&&(CFG().countEvents||br!=='Events')){
         const lk=e+'|'+loc;locTotals.set(lk,(locTotals.get(lk)||0)+v);
       }
     });
@@ -3155,7 +3228,7 @@ nsShowCustomerDetails=function(){tab='cust';nsShowAllInvoiceLines=false;nsExpand
   // Management print figures have a Super Admin selectable scale; exported workbook values stay in AED.
   function nsPrintMoney(v){const n=Number(v)||0,scale=CFG().printSalesScale||'millions';if(scale==='millions')return (n/1000000).toLocaleString('en-AE',{minimumFractionDigits:2,maximumFractionDigits:2});if(scale==='thousands')return (n/1000).toLocaleString('en-AE',{minimumFractionDigits:2,maximumFractionDigits:2});return F2(n)}
   function nsPrintScaleLabel(){const s=CFG().printSalesScale||'millions';return s==='millions'?'AED millions':s==='thousands'?'AED thousands':'AED'}
-  function nsPrintTable(rows,cols){return '<table class="mgmt-table"><thead><tr>'+cols.map(c=>'<th>'+esc(c)+'</th>').join('')+'</tr></thead><tbody>'+((rows||[]).map(r=>'<tr>'+cols.map(c=>'<td>'+esc(r[c]==null?'':typeof r[c]==='number'&&/Sales|Debit|Credit|Variance|Adjustment|Total|Amount/i.test(c)?nsPrintMoney(r[c]):r[c])+'</td>').join('')+'</tr>').join('')||'<tr><td colspan="'+cols.length+'">No data</td></tr>')+'</tbody></table>'}
+  function nsPrintTable(rows,cols){return '<table class="mgmt-table"><thead><tr>'+cols.map(c=>'<th>'+esc(c)+'</th>').join('')+'</tr></thead><tbody>'+((rows||[]).map(r=>'<tr>'+cols.map(c=>'<td>'+esc(r[c]==null?'':typeof r[c]==='number'&&/Sales|Debit|Credit|Variance|Adjustment|Total|Amount/i.test(c)?nsPrintMoney(r[c]):nsFig(c,r[c]))+'</td>').join('')+'</tr>').join('')||'<tr><td colspan="'+cols.length+'">No data</td></tr>')+'</tbody></table>'}
   function nsPrintCategoryPie(title,rows){
     const sums=new Map();(rows||[]).forEach(r=>{const name=String(r.Category||'Other / Unmapped');sums.set(name,(sums.get(name)||0)+(Number(r['Net Sales'])||0))});
     const allRaw=[...sums.entries()].sort((a,b)=>Math.abs(b[1])-Math.abs(a[1]));const all=allRaw.length>7?allRaw.slice(0,6).concat([['Other categories',allRaw.slice(6).reduce((s,x)=>s+x[1],0)]]):allRaw;let data=all.filter(x=>x[1]>0.004).sort((a,b)=>b[1]-a[1]);
@@ -3178,17 +3251,24 @@ nsShowCustomerDetails=function(){tab='cust';nsShowAllInvoiceLines=false;nsExpand
       const topRows=d.topBranches.map(x=>({Entity:x.Entity,Rank:Math.round(Number(x.Rank)||0),Branch:x.Branch,'Net Sales':Number(x['Net Sales'])||0}));
       const monthlyRows=monthly.slice(-12).map(x=>({Month:x.Month,HB:x.HB,HBK:x.HBK,LG:x.LG,Total:x.Total}));
       const catsByEnt={HB:[],HBK:[],LG:[]};allCats.forEach(r=>{const e=nsEntityCode(r.Entity);if(catsByEnt[e])catsByEnt[e].push(r)});
-      const catTotals=new Map();allCats.forEach(r=>{const cat=String(r.Category||'Other / Unmapped');catTotals.set(cat,(catTotals.get(cat)||0)+(Number(r['Net Sales'])||0))});
-      let categorySummaryRows=[...catTotals.entries()].sort((a,b)=>Math.abs(b[1])-Math.abs(a[1]));if(categorySummaryRows.length>10){categorySummaryRows=categorySummaryRows.slice(0,9).concat([['Other categories',categorySummaryRows.slice(9).reduce((sum,x)=>sum+x[1],0)]]);}categorySummaryRows=categorySummaryRows.map(([Category,amount])=>({Category,'Net Sales':amount}));
+      const catEnt=new Map();allCats.forEach(r=>{const cat=String(r.Category||'Other / Unmapped'),e=nsEntityCode(r.Entity);if(!catEnt.has(cat))catEnt.set(cat,{HB:0,HBK:0,LG:0});const o=catEnt.get(cat);if(e in o)o[e]+=Number(r['Net Sales'])||0});
+      let catList=[...catEnt.entries()].map(([Category,o])=>({Category,HB:o.HB,HBK:o.HBK,LG:o.LG,Total:o.HB+o.HBK+o.LG})).sort((a,b)=>Math.abs(b.Total)-Math.abs(a.Total));
+      if(catList.length>12){const rest=catList.slice(11);catList=catList.slice(0,11).concat([{Category:'Other categories',HB:rest.reduce((x,y)=>x+y.HB,0),HBK:rest.reduce((x,y)=>x+y.HBK,0),LG:rest.reduce((x,y)=>x+y.LG,0),Total:rest.reduce((x,y)=>x+y.Total,0)}])}
+      const catGrand={Category:'TOTAL',HB:catList.reduce((x,y)=>x+y.HB,0),HBK:catList.reduce((x,y)=>x+y.HBK,0),LG:catList.reduce((x,y)=>x+y.LG,0),Total:catList.reduce((x,y)=>x+y.Total,0)};
+      const categorySummaryRows=catList.concat([catGrand]).map(r=>({Category:r.Category,HB:fmt(r.HB),HBK:fmt(r.HBK),LG:fmt(r.LG),Total:fmt(r.Total)}));
+      const categoryTableHTML=nsPrintTable(categorySummaryRows,['Category','HB','HBK','LG','Total']).replace('<tr><td>TOTAL</td>','<tr class="tot-row"><td>TOTAL</td>');
       const pieHTML=['HB','HBK','LG'].map(e=>nsPrintCategoryPie('Net Sales by Category — '+e,catsByEnt[e])).join('');
       const entityCells=d.entityRows.map(r=>Object.assign({},r,{Entity:r.Entity}));
-      const css='body{font-family:Segoe UI,Arial,sans-serif;color:#172538;margin:20px;font-size:11px}header{background:#17365d;color:#fff;padding:16px 18px;margin-bottom:12px}header h1{font-size:22px;margin:0 0 5px;overflow-wrap:anywhere}header p{margin:0;color:#e7edf5}.summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:7px;margin:8px 0 10px}.box{border:1px solid #d9e1eb;padding:7px;border-radius:5px;min-width:0}.box span{display:block;color:#5f6d7e;font-size:9px}.box b{display:block;font-size:14px;margin-top:4px;overflow-wrap:anywhere}h2{color:#17365d;font-size:14px;margin:12px 0 6px;border-bottom:1px solid #d5deea;padding-bottom:4px}.note{font-size:9px;color:#5b6777;margin:5px 0 14px}table{border-collapse:collapse;width:100%;font-size:9px;table-layout:auto;margin-bottom:10px}th,td{border:1px solid #d5deea;padding:4px 5px;text-align:left;vertical-align:top;overflow-wrap:anywhere;word-break:normal;white-space:normal}th{background:#eaf0f7;color:#17365d}tr{break-inside:avoid}.entity-split{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}.cat-pie{border:1px solid #d9e1eb;border-radius:6px;padding:7px;min-width:0;break-inside:avoid;page-break-inside:avoid}.cat-pie h3{font-size:11px;color:#17365d;margin:0 0 4px;overflow-wrap:anywhere}.cat-pie svg{display:block;width:100%;max-width:150px;margin:0 auto}.cat-pie-legend>div:not(.cat-pie-legend-head){display:grid;grid-template-columns:8px minmax(0,1fr) auto 32px;gap:4px;align-items:center;font-size:8px;margin:3px 0}.cat-pie-legend-head{display:grid;grid-template-columns:minmax(0,1fr) auto 32px;gap:4px;align-items:center;font-size:8px;margin:0 0 4px;background:#17365d;color:#fff;padding:4px 5px;border-radius:4px;font-weight:800}.cat-pie-legend-head span{min-width:0;overflow-wrap:normal;word-break:keep-all}.cat-pie-legend i{width:8px;height:8px;border-radius:2px;display:block}.cat-pie-legend span{overflow-wrap:anywhere}.cat-pie-legend b{text-align:right;font-weight:600}.actions{display:flex;gap:8px;margin-bottom:12px}.actions button{background:#17365d;color:white;border:0;border-radius:5px;padding:9px 12px;cursor:pointer}.actions .alt{background:#e8edf4;color:#17365d}.mgmt-table th:first-child,.mgmt-table td:first-child{min-width:60px;overflow-wrap:anywhere}.smallbasis{font-size:8.5px;color:#5b6777;margin:5px 0 8px}.report-footer{border-top:1px solid #d5deea;margin-top:8px;padding-top:5px;font-size:8px;color:#65748a;text-align:right}.entity-full{white-space:normal;overflow-wrap:anywhere}.report-page{box-sizing:border-box}.page-one,.page-two{break-after:page;page-break-after:always}.page-three{break-after:auto;page-break-after:auto}@page{size:A4 landscape;margin:8mm}@page{@bottom-right{content:"Page " counter(page) " of " counter(pages);font-size:8px;color:#65748a}}@media(max-width:700px){.summary{grid-template-columns:repeat(2,minmax(0,1fr))}.entity-split{grid-template-columns:1fr}}@media print{.actions,button,.noprint{display:none!important}body{margin:0;font-size:9px}header{padding:9px 12px;margin-bottom:8px;print-color-adjust:exact;-webkit-print-color-adjust:exact}header h1{font-size:18px}header p{font-size:8px}h2{font-size:12px;margin:9px 0 4px;padding-bottom:3px}table{font-size:8px;margin-bottom:7px}th,td{padding:3px 4px}th{print-color-adjust:exact;-webkit-print-color-adjust:exact}.box{padding:5px}.box span{font-size:8px}.box b{font-size:12px;margin-top:2px}.summary{gap:5px;margin:6px 0 7px}.smallbasis{font-size:8px;margin:4px 0 6px}.page-one,.page-two{break-after:page;page-break-after:always}.page-three{break-after:auto;page-break-after:auto}.entity-split{grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}.cat-pie{padding:5px}.cat-pie svg{max-width:115px}.cat-pie-legend>div:not(.cat-pie-legend-head){font-size:7.5px;grid-template-columns:7px minmax(0,1fr) auto 28px;gap:3px;margin:2px 0}.cat-pie-legend-head{font-size:7.5px;grid-template-columns:minmax(0,1fr) auto 28px;padding:3px}.report-footer{margin-top:5px;padding-top:4px}}';
+      const css='.tot-row td{font-weight:800;background:#eaf0f7}.actions a{background:#e8edf4;color:#17365d;border-radius:5px;padding:9px 12px;text-decoration:none;font-size:13px;display:inline-block}.mgmt-table td:not(:first-child){white-space:nowrap}body{font-family:Segoe UI,Arial,sans-serif;color:#172538;margin:20px;font-size:11px}header{background:#17365d;color:#fff;padding:16px 18px;margin-bottom:12px}header h1{font-size:22px;margin:0 0 5px;overflow-wrap:anywhere}header p{margin:0;color:#e7edf5}.summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:7px;margin:8px 0 10px}.box{border:1px solid #d9e1eb;padding:7px;border-radius:5px;min-width:0}.box span{display:block;color:#5f6d7e;font-size:9px}.box b{display:block;font-size:14px;margin-top:4px;overflow-wrap:anywhere}h2{color:#17365d;font-size:14px;margin:12px 0 6px;border-bottom:1px solid #d5deea;padding-bottom:4px}.note{font-size:9px;color:#5b6777;margin:5px 0 14px}table{border-collapse:collapse;width:100%;font-size:9px;table-layout:auto;margin-bottom:10px}th,td{border:1px solid #d5deea;padding:4px 5px;text-align:left;vertical-align:top;overflow-wrap:anywhere;word-break:normal;white-space:normal}th{background:#eaf0f7;color:#17365d}tr{break-inside:avoid}.entity-split{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}.cat-pie{border:1px solid #d9e1eb;border-radius:6px;padding:7px;min-width:0;break-inside:avoid;page-break-inside:avoid}.cat-pie h3{font-size:11px;color:#17365d;margin:0 0 4px;overflow-wrap:anywhere}.cat-pie svg{display:block;width:100%;max-width:150px;margin:0 auto}.cat-pie-legend>div:not(.cat-pie-legend-head){display:grid;grid-template-columns:8px minmax(0,1fr) auto 32px;gap:4px;align-items:center;font-size:8px;margin:3px 0}.cat-pie-legend-head{display:grid;grid-template-columns:minmax(0,1fr) auto 32px;gap:4px;align-items:center;font-size:8px;margin:0 0 4px;background:#17365d;color:#fff;padding:4px 5px;border-radius:4px;font-weight:800}.cat-pie-legend-head span{min-width:0;overflow-wrap:normal;word-break:keep-all}.cat-pie-legend i{width:8px;height:8px;border-radius:2px;display:block}.cat-pie-legend span{overflow-wrap:anywhere}.cat-pie-legend b{text-align:right;font-weight:600}.actions{display:flex;gap:8px;margin-bottom:12px}.actions button{background:#17365d;color:white;border:0;border-radius:5px;padding:9px 12px;cursor:pointer}.actions .alt{background:#e8edf4;color:#17365d}.mgmt-table th:first-child,.mgmt-table td:first-child{min-width:60px;overflow-wrap:anywhere}.smallbasis{font-size:8.5px;color:#5b6777;margin:5px 0 8px}.report-footer{border-top:1px solid #d5deea;margin-top:8px;padding-top:5px;font-size:8px;color:#65748a;text-align:right}.entity-full{white-space:normal;overflow-wrap:anywhere}.report-page{box-sizing:border-box}.page-one,.page-two{break-after:page;page-break-after:always}.page-three{break-after:auto;page-break-after:auto}@page{size:A4 landscape;margin:8mm}@page{@bottom-right{content:"Page " counter(page) " of " counter(pages);font-size:8px;color:#65748a}}@media(max-width:700px){.summary{grid-template-columns:repeat(2,minmax(0,1fr))}.entity-split{grid-template-columns:1fr}}@media print{.actions,button,.noprint{display:none!important}body{margin:0;font-size:9px}header{padding:9px 12px;margin-bottom:8px;print-color-adjust:exact;-webkit-print-color-adjust:exact}header h1{font-size:18px}header p{font-size:8px}h2{font-size:12px;margin:9px 0 4px;padding-bottom:3px}table{font-size:8px;margin-bottom:7px}th,td{padding:3px 4px}th{print-color-adjust:exact;-webkit-print-color-adjust:exact}.box{padding:5px}.box span{font-size:8px}.box b{font-size:12px;margin-top:2px}.summary{gap:5px;margin:6px 0 7px}.smallbasis{font-size:8px;margin:4px 0 6px}.page-one,.page-two{break-after:page;page-break-after:always}.page-three{break-after:auto;page-break-after:auto}.entity-split{grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}.cat-pie{padding:5px}.cat-pie svg{max-width:115px}.cat-pie-legend>div:not(.cat-pie-legend-head){font-size:7.5px;grid-template-columns:7px minmax(0,1fr) auto 28px;gap:3px;margin:2px 0}.cat-pie-legend-head{font-size:7.5px;grid-template-columns:minmax(0,1fr) auto 28px;padding:3px}.report-footer{margin-top:5px;padding-top:4px}}';
       const cards=[['Net Sales',fmt(s.net)],['Micros Sales',fmt(s.micros)],['Invoice Sales',fmt(s.invoice)],['Journal Adjustments',fmt(s.journal)],['Active Entities',F0(counts.entities)],['Active Branches',F0(counts.branches)],['Active Locations',F0(counts.locations)]];
       const cardsHTML=cards.map(([label,val])=>'<div class="box"><span>'+esc(label)+'</span><b>'+esc(val)+'</b></div>').join('');
       const mgmtRows=entityCells.map(r=>Object.fromEntries(Object.entries(r).map(([k,v])=>[k,(typeof v==='number'&&/Sales|Debit|Credit|Adjustment|Total|YTD/i.test(k))?fmt(v):v])));
       const topFmt=topRows.map(r=>({Entity:r.Entity,Rank:F0(r.Rank),Branch:r.Branch,'Net Sales':fmt(r['Net Sales'])}));
       const monthFmt=monthlyRows.map(r=>({Month:r.Month,HB:fmt(r.HB),HBK:fmt(r.HBK),LG:fmt(r.LG),Total:fmt(r.Total)}));
-      const html='<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Home Bakery Management Sales Report</title><style>'+css+'</style></head><body><div class="actions"><button onclick="window.print()">Print / Save as PDF</button><button class="alt" onclick="if(window.opener){window.opener.focus();window.close()}else{history.back()}">Back to Dashboard</button></div><section class="report-page page-one"><header><h1>Home Bakery · Management Sales Report</h1><p>Period: '+esc(from)+' to '+esc(to)+' · Entity scope: '+esc(flt.ent||dashRegion||'All entities')+' · Currency: AED · Generated '+esc(new Date().toLocaleString('en-AE'))+'</p></header><div class="summary">'+cardsHTML+'</div><p class="smallbasis">Net Sales includes Micros Sales and Invoice Sales; sales-related Credit Memos and Journals are reflected where applicable. Figures shown in '+esc(scale)+'.</p><h2>Management Summary</h2>'+nsPrintTable(mgmtRows,entityCols)+'<h2>Top 3 Branches per Entity</h2>'+nsPrintTable(topFmt,['Entity','Rank','Branch','Net Sales'])+'</section><section class="report-page page-two"><h2>Monthly Entity Trend — Latest 12 Months</h2>'+nsPrintTable(monthFmt,['Month','HB','HBK','LG','Total'])+'<h2>Category Summary — All Entities</h2>'+nsPrintTable(categorySummaryRows,['Category','Net Sales'])+'<p class="smallbasis">The monthly trend is limited to the latest 12 months for this executive summary. Exact transaction detail remains available in the application and Management Excel Pack.</p></section><section class="report-page page-three"><h2>Category Net Sales by Entity</h2><div class="entity-split">'+pieHTML+'</div><p class="smallbasis">Total GL Debit and Total GL Credit are available in GL details for audit review and are omitted from this management summary.</p><footer class="report-footer">Home Bakery · Management Sales Report · Figures in '+esc(scale)+' · Generated '+esc(new Date().toLocaleString('en-AE'))+'</footer></section></body></html>';
+      const entLines=(d.entityRows||[]).map(r=>{const k=Object.keys(r).find(c=>/Selected Period Net Sales/i.test(c))||Object.keys(r).find(c=>/Net Sales/i.test(c));return k?String(r.Entity)+': '+fmt(Number(r[k])||0):''}).filter(Boolean);
+      const shareText='Dear Team,\n\nPlease find attached the Home Bakery Management Sales Report.\n\nPeriod: '+from+' to '+to+'\nNet Sales ('+scale+'): '+fmt(s.net)+(entLines.length?'\n\nBy entity:\n'+entLines.map(x=>'• '+x).join('\n'):'')+'\n\nKindly review and let me know if you have any questions.\n\nRegards';
+      const shareHTML='<a class="alt" target="_blank" rel="noopener" href="https://wa.me/?text='+encodeURIComponent(shareText)+'">Send via WhatsApp</a><a class="alt" href="mailto:?subject='+encodeURIComponent('Home Bakery Management Sales Report - '+from+' to '+to)+'&body='+encodeURIComponent(shareText)+'">Send via Email</a>';
+      const html='<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Home Bakery Management Sales Report</title><style>'+css+'</style></head><body><div class="actions"><button onclick="window.print()">Print / Save as PDF</button>'+shareHTML+'<button class="alt" onclick="if(window.opener){window.opener.focus();window.close()}else{history.back()}">Back to Dashboard</button></div><section class="report-page page-one"><header><h1>Home Bakery · Management Sales Report</h1><p>Period: '+esc(from)+' to '+esc(to)+' · Entity scope: '+esc(flt.ent||dashRegion||'All entities')+' · Currency: AED · Generated '+esc(new Date().toLocaleString('en-AE'))+'</p></header><div class="summary">'+cardsHTML+'</div><p class="smallbasis">Net Sales includes Micros Sales and Invoice Sales; sales-related Credit Memos and Journals are reflected where applicable. Figures shown in '+esc(scale)+'.</p><h2>Management Summary</h2>'+nsPrintTable(mgmtRows,entityCols)+'<h2>Top 3 Branches per Entity</h2>'+nsPrintTable(topFmt,['Entity','Rank','Branch','Net Sales'])+'</section><section class="report-page page-two"><h2>Monthly Entity Trend — Latest 12 Months</h2>'+nsPrintTable(monthFmt,['Month','HB','HBK','LG','Total'])+'<h2>Category Summary — By Entity &amp; Total</h2>'+categoryTableHTML+'<p class="smallbasis">The monthly trend is limited to the latest 12 months for this executive summary. Exact transaction detail remains available in the application and Management Excel Pack.</p></section><section class="report-page page-three"><h2>Category Net Sales by Entity</h2><div class="entity-split">'+pieHTML+'</div><p class="smallbasis">Total GL Debit and Total GL Credit are available in GL details for audit review and are omitted from this management summary.</p><footer class="report-footer">Home Bakery · Management Sales Report · Figures in '+esc(scale)+' · Generated '+esc(new Date().toLocaleString('en-AE'))+'</footer></section></body></html>';
       const w=window.open('','_blank');
       if(!w){dl('Home_Bakery_Management_Sales_Report.html',new Blob([html],{type:'text/html;charset=utf-8'}));addLog('Export','Management Sales Report','Popup blocked','Downloaded print-ready HTML. Open it and choose Print / Save as PDF.');msg('A printable management report was downloaded. Open it and choose Print / Save as PDF.',true);return}
       w.document.open();w.document.write(html);w.document.close();addLog('Export','Management Sales Report','Prepared',from+' to '+to);
@@ -3209,13 +3289,13 @@ nsShowCustomerDetails=function(){tab='cust';nsShowAllInvoiceLines=false;nsExpand
 
   // Tab-level Editor access, complementary to the existing Viewer and All Users controls.
   function nsSetEditorTab(key,visible){if(!can(4))return;const cfg=Object.assign({},pkg.cfg||{}),hidden=new Set(Array.isArray(cfg.editorHideTabs)?cfg.editorHideTabs:[]);if(visible)hidden.delete(key);else hidden.add(key);cfg.editorHideTabs=[...hidden];pkg.cfg=cfg;touch();render()}
-  function nsSetRoleContent(role,id,visible){if(!can(4)||!['viewer','editor'].includes(role))return;const cfg=Object.assign({},pkg.cfg||{}),obj=Object.assign({viewer:[],editor:[]},cfg.roleContentHidden||{}),s=new Set(Array.isArray(obj[role])?obj[role]:[]);if(visible)s.delete(id);else s.add(id);obj[role]=[...s];cfg.roleContentHidden=obj;pkg.cfg=cfg;touch();render()}
+  function nsSetRoleContent(role,id,visible){if(!can(4)||!['viewer','editor'].includes(role))return;const cfg=Object.assign({},pkg.cfg||{}),obj=Object.assign({viewer:['branch_counts'],editor:[]},cfg.roleContentHidden||{}),s=new Set(Array.isArray(obj[role])?obj[role]:(role==='viewer'?['branch_counts']:[]));if(visible)s.delete(id);else s.add(id);obj[role]=[...s];cfg.roleContentHidden=obj;pkg.cfg=cfg;touch();render()}
   const nsRoleFeatures=[
-    ['dash_kpis','Dashboard · KPI cards'],['dash_entity','Dashboard · Entity sales chart'],['dash_branch','Dashboard · Sales by Branch'],['dash_trend','Dashboard · Monthly trend'],['dash_location','Dashboard · Sales by Location'],['dash_month','Dashboard · Sales by Month'],['dash_categories','Dashboard · Three entity category pie charts'],['dash_management','Dashboard · Management Summary'],['cmp_visual','Comparison · Visual comparison'],['cmp_entity','Comparison · Entity comparison table'],['cmp_branch','Comparison · Branch/location table'],['category_content','Category Analysis · Filter and summary content'],['customer_content','Customer & Invoices · Customer and invoice content'],['journals_content','Journals & Adjustments · Detail table'],['register_content','Report Register · Detail table'],['gl_content','GL Transaction Details · Detail table']
+    ['dash_kpis','Dashboard · KPI cards'],['dash_entity','Dashboard · Entity sales chart'],['dash_branch','Dashboard · Sales by Branch'],['dash_trend','Dashboard · Monthly trend'],['dash_location','Dashboard · Sales by Location'],['dash_month','Dashboard · Sales by Month'],['dash_categories','Dashboard · Three entity category pie charts'],['dash_management','Dashboard · Management Summary'],['dash_yoy','Dashboard · Same period vs last year'],['branch_counts','Branch counts (Branches KPI card and Branches / Branch Count columns)'],['cmp_visual','Comparison · Visual comparison'],['cmp_entity','Comparison · Entity comparison table'],['cmp_branch','Comparison · Branch/location table'],['category_content','Category Analysis · Filter and summary content'],['customer_content','Customer & Invoices · Customer and invoice content'],['journals_content','Journals & Adjustments · Detail table'],['register_content','Report Register · Detail table'],['gl_content','GL Transaction Details · Detail table']
   ];
   function nsRoleVisibilityUI(){
     const cfg=CFG(),hidden=cfg.roleContentHidden||{},editorTabs=new Set(Array.isArray(cfg.editorHideTabs)?cfg.editorHideTabs:[]),order=nsTabOrder();
-    const contentRows=nsRoleFeatures.map(([id,label])=>'<tr><td>'+esc(label)+'</td>'+['viewer','editor'].map(role=>'<td><label><input type="checkbox" '+((hidden[role]||[]).includes(id)?'':'checked')+' onchange="nsSetRoleContent(\''+role+'\',\''+id+'\',this.checked)"> Show</label></td>').join('')+'</tr>').join('');
+    const contentRows=nsRoleFeatures.map(([id,label])=>'<tr><td>'+esc(label)+'</td>'+['viewer','editor'].map(role=>'<td><label><input type="checkbox" '+((Array.isArray(hidden[role])?hidden[role]:(role==='viewer'?['branch_counts']:[])).includes(id)?'':'checked')+' onchange="nsSetRoleContent(\''+role+'\',\''+id+'\',this.checked)"> Show</label></td>').join('')+'</tr>').join('');
     const tabRows=order.filter(k=>!['usr','apr','bk'].includes(k)).map(k=>'<tr><td>'+esc(nsTabLabel(k))+'</td><td><label><input type="checkbox" '+(editorTabs.has(k)?'':'checked')+' onchange="nsSetEditorTab(\''+k+'\',this.checked)"> Show to Editor</label></td></tr>').join('');
     return '<div class="card"><h3>Viewer / Editor content visibility</h3><p class="note">Super Admin only. These controls hide specific report components within a tab for Viewer and Editor roles. Tabs can also be hidden separately above. Changes are saved in shared configuration; publish/sync as usual.</p><div class="sc"><table><thead><tr><th>Tab component</th><th>Viewer</th><th>Editor</th></tr></thead><tbody>'+contentRows+'</tbody></table></div><h4 style="margin-top:16px">Editor tab access</h4><div class="sc"><table><thead><tr><th>Tab</th><th>Editor visibility</th></tr></thead><tbody>'+tabRows+'</tbody></table></div></div>';
   }
@@ -3230,12 +3310,12 @@ nsShowCustomerDetails=function(){tab='cust';nsShowAllInvoiceLines=false;nsExpand
     const root=document.getElementById('view');if(!root)return [];
     const q=s=>[...root.querySelectorAll(s)];
     const byHeading=(re)=>q('.card').filter(el=>{const h=el.querySelector('h3');return h&&re.test(h.textContent.trim())});
-    const cfg={dash_kpis:()=>q('.ns-kpi-grid'),dash_entity:()=>byHeading(/^Net Sales by Entity$/),dash_branch:()=>byHeading(/^Net Sales by Branch$/),dash_trend:()=>byHeading(/^Monthly Net Sales by Entity$/),dash_location:()=>byHeading(/^Net Sales by Location$/),dash_month:()=>byHeading(/^Net Sales by Month$/),dash_categories:()=>q('.ns-category-pies'),dash_management:()=>q('.ns-management-head,.ns-entity-summary'),cmp_visual:()=>byHeading(/^Visual Comparison by Entity$/),cmp_entity:()=>byHeading(/^Entity Comparison$/),cmp_branch:()=>byHeading(/^Branch \/ Location Comparison$/),category_content:()=>q('[data-role-content="category_content"]'),customer_content:()=>q('[data-role-content="customer_content"]'),journals_content:()=>q('[data-role-content="journals_content"]'),register_content:()=>q('[data-role-content="register_content"]'),gl_content:()=>q('[data-role-content="gl_content"]')};
+    const cfg={dash_kpis:()=>q('.ns-kpi-grid .k').filter(el=>((el.querySelector('small')||{}).textContent||'').trim()!=='Net Sales'),dash_entity:()=>byHeading(/^Net Sales by Entity$/),dash_branch:()=>byHeading(/^Net Sales by Branch$/),dash_trend:()=>byHeading(/^Monthly Net Sales by Entity$/),dash_location:()=>byHeading(/^Net Sales by Location$/),dash_month:()=>byHeading(/^Net Sales by Month$/),dash_categories:()=>q('.ns-category-pies'),dash_management:()=>q('.ns-management-head,.ns-entity-summary'),dash_yoy:()=>byHeading(/^Same Period vs Last Year$/),branch_counts:()=>{const out=q('.k').filter(el=>/^Branches$/.test(((el.querySelector('small')||{}).textContent||'').trim()));q('table').forEach(t=>{const ths=[...t.querySelectorAll('thead th')];ths.forEach((th,i)=>{if(/^(Branches|Branch Count)$/.test(th.textContent.trim())){out.push(th);t.querySelectorAll('tbody tr').forEach(tr=>{if(tr.children.length===ths.length&&tr.children[i])out.push(tr.children[i])})}})});return out},cmp_visual:()=>byHeading(/^Visual Comparison by Entity$/),cmp_entity:()=>byHeading(/^Entity Comparison$/),cmp_branch:()=>byHeading(/^Branch \/ Location Comparison$/),category_content:()=>q('[data-role-content="category_content"]'),customer_content:()=>q('[data-role-content="customer_content"]'),journals_content:()=>q('[data-role-content="journals_content"]'),register_content:()=>q('[data-role-content="register_content"]'),gl_content:()=>q('[data-role-content="gl_content"]')};
     try{return (cfg[id]||(()=>[]))()}catch(e){return []}
   }
   function nsApplyRoleContentVisibility(){
     if(!me||!['viewer','editor'].includes(me.role))return;
-    const role=me.role,hidden=((CFG().roleContentHidden||{})[role]||[]);
+    const role=me.role,hidden=(Array.isArray((CFG().roleContentHidden||{})[role])?(CFG().roleContentHidden||{})[role]:(role==='viewer'?['branch_counts']:[]));
     nsRoleFeatures.forEach(([id])=>nsRoleTargets(id).forEach(el=>{if(hidden.includes(id)){el.style.display='none';el.setAttribute('data-role-hidden','1')}else if(el.getAttribute('data-role-hidden')==='1'){el.style.display='';el.removeAttribute('data-role-hidden')}}));
   }
   function nsUpdateDashboardCounts(){
@@ -3253,7 +3333,7 @@ nsShowCustomerDetails=function(){tab='cust';nsShowAllInvoiceLines=false;nsExpand
     const order=nsTabOrder(),sorted=order.map(k=>NS_TABS.find(t=>t[0]===k)).filter(Boolean);
     const vis=sorted.filter(t=>{
       if(t[0]==='usr'&&!can(3))return false;if(t[0]==='apr'&&!can(4))return false;if(t[0]==='bk'&&!can(2))return false;
-      if(globallyHidden.includes(t[0]))return false;if(me&&me.role==='viewer'&&viewerHidden.includes(t[0]))return false;if(me&&me.role==='editor'&&editorHidden.includes(t[0]))return false;return true;
+      if(globallyHidden.includes(t[0]))return false;if(me&&me.role==='viewer'&&(viewerHidden.includes(t[0])||['map','log','tx','cat','adj','reg'].includes(t[0])))return false;if(me&&me.role==='editor'&&editorHidden.includes(t[0]))return false;return true;
     });
     if(!vis.some(t=>t[0]===tab))tab='dash';
     $('#nav').innerHTML=vis.map(t=>'<button class="'+(t[0]===tab?'on':'')+'" onclick="tab=\''+t[0]+'\';render()">'+esc(nsTabLabel(t[0]))+'</button>').join('');
@@ -3341,27 +3421,28 @@ function nsBudgetSvg(year,entity){
   const max=Math.max(1,...vals.filter(Number.isFinite)),min=Math.min(0,...vals.filter(Number.isFinite)),span=max-min||1;
   const W=900,Ht=292,left=52,right=20,top=24,bottom=38,pw=W-left-right,ph=Ht-top-bottom;
   const x=i=>left+(pw*i/11),y=v=>top+((max-v)/span)*ph;
-  const ticks=4,grid=Array.from({length:ticks+1},(_,i)=>{const v=max-(span*i/ticks);const yy=y(v);return '<line x1="'+left+'" y1="'+yy+'" x2="'+(W-right)+'" y2="'+yy+'" stroke="#dbe3ed" stroke-width="1"/><text x="'+(left-8)+'" y="'+(yy+4)+'" text-anchor="end" fill="#66758a" font-size="10">'+nsUiSalesNumber(v*1000000)+'</text>'}).join('');
+  const ticks=4,grid=Array.from({length:ticks+1},(_,i)=>{const v=max-(span*i/ticks);const yy=y(v);return '<line x1="'+left+'" y1="'+yy+'" x2="'+(W-right)+'" y2="'+yy+'" stroke="#d3deec" stroke-width="1"/><text x="'+(left-8)+'" y="'+(yy+4)+'" text-anchor="end" fill="#66758a" font-size="10">'+nsUiSalesNumber(v*1000000)+'</text>'}).join('');
   const actPath=data.map((d,i)=>(i?'L':'M')+x(i).toFixed(1)+','+y(d.Actual).toFixed(1)).join(' ');
   const budPts=data.map((d,i)=>d.Budget===null?null:{i,v:d.Budget}).filter(Boolean);
   const budPath=budPts.map((d,j)=>(j?'L':'M')+x(d.i).toFixed(1)+','+y(d.v).toFixed(1)).join(' ');
-  const actualDots=data.map((d,i)=>'<circle cx="'+x(i)+'" cy="'+y(d.Actual)+'" r="3.3" fill="#1f3a5f"><title>'+esc(d.Month+' '+year+' actual: '+nsUiMoney(d.Actual*1000000)+' '+nsUiScaleLabel())+'</title></circle>').join('');
-  const budgetDots=budPts.map(d=>'<circle cx="'+x(d.i)+'" cy="'+y(d.v)+'" r="3.6" fill="#c28d42"><title>'+esc(data[d.i].Month+' '+year+' budget: '+nsUiMoney(d.v*1000000)+' '+nsUiScaleLabel())+'</title></circle>').join('');
+  const actualDots=data.map((d,i)=>'<circle cx="'+x(i)+'" cy="'+y(d.Actual)+'" r="3.3" fill="#1457c8"><title>'+esc(d.Month+' '+year+' actual: '+nsUiMoney(d.Actual*1000000)+' '+nsUiScaleLabel())+'</title></circle>').join('');
+  const budgetDots=budPts.map(d=>'<circle cx="'+x(d.i)+'" cy="'+y(d.v)+'" r="3.6" fill="#e8590c"><title>'+esc(data[d.i].Month+' '+year+' budget: '+nsUiMoney(d.v*1000000)+' '+nsUiScaleLabel())+'</title></circle>').join('');
   const labels= data.map((d,i)=>'<text x="'+x(i)+'" y="'+(Ht-14)+'" text-anchor="middle" fill="#506176" font-size="11">'+d.Short+'</text>').join('');
-  return '<svg class="ns-budget-svg" viewBox="0 0 '+W+' '+Ht+'" role="img" aria-label="Monthly budget versus actual sales in '+esc(nsUiScaleLabel())+'">'+grid+'<path d="'+actPath+'" fill="none" stroke="#1f3a5f" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>'+actualDots+(budPts.length?'<path d="'+budPath+'" fill="none" stroke="#c28d42" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="7 4"/>'+budgetDots:'')+labels+'</svg>';
+  return '<svg class="ns-budget-svg" viewBox="0 0 '+W+' '+Ht+'" role="img" aria-label="Monthly budget versus actual sales in '+esc(nsUiScaleLabel())+'"><rect x="'+left+'" y="'+top+'" width="'+pw+'" height="'+ph+'" rx="6" fill="#ffffff"/>'+grid+'<path d="'+actPath+'" fill="none" stroke="#1457c8" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>'+actualDots+(budPts.length?'<path d="'+budPath+'" fill="none" stroke="#e8590c" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="7 4"/>'+budgetDots:'')+labels+'</svg>';
 }
 function nsBudgetEntityOptions(){return ['All','HB','HBK','LG'].map(e=>'<option value="'+e+'"'+(String(nsBudgetChartEntity)===e?' selected':'')+'>'+ (e==='All'?'All Entities':e)+'</option>').join('')}
 function nsBudgetYearOptions(){const y=nsBudgetCurrentYear();return nsBudgetYears().map(v=>'<option value="'+esc(v)+'"'+(String(y)===String(v)?' selected':'')+'>'+esc(v)+'</option>').join('')}
 function nsBudgetGraphCard(onDashboard){
   const y=nsBudgetCurrentYear(),e=nsBudgetChartEntity,plan=nsBudgetRowsForYear(y,e),rows=nsBudgetMonthly(y,e),has=plan.some(r=>(r.months||[]).some(v=>v!==null&&v!==undefined&&v!==''));
   const controls='<div class="row noprint" style="gap:10px;align-items:end;flex-wrap:wrap"><label>Budget year <select onchange="nsBudgetYear=this.value;render()">'+nsBudgetYearOptions()+'</select></label><label>Entity <select onchange="nsBudgetChartEntity=this.value;render()">'+nsBudgetEntityOptions()+'</select></label></div>';
-  const legend='<div class="ns-budget-legend"><span><i style="background:#1f3a5f"></i>Actual Net Sales</span><span><i style="background:#c28d42"></i>Budget</span><span class="note">Figures are in '+nsUiScaleLabel()+'</span></div>';
+  const legend='<div class="ns-budget-legend"><span><i style="background:#1457c8"></i>Actual Net Sales</span><span><i style="background:#e8590c"></i>Budget</span><span class="note">Variance: green = ahead of budget, red = behind · Figures are in '+nsUiScaleLabel()+'</span></div>';
   const scaleCode=nsUiScale()==='millions'?'AED M':nsUiScale()==='thousands'?'AED K':'AED';
   const displayBudgetValue=v=>v===null||v===undefined?'—':nsUiMoney(Number(v)*1000000);
-  const budgetHeaders=['Month','Budget ('+scaleCode+')','Actual Net Sales ('+scaleCode+')','Variance ('+scaleCode+')','Variance %','Budgeted Branches'];
-  const budgetBody=rows.map(r=>'<tr><td>'+esc(r.Month)+'</td><td class="num">'+esc(displayBudgetValue(r.Budget))+'</td><td class="num">'+esc(displayBudgetValue(r.Actual))+'</td><td class="num">'+esc(displayBudgetValue(r.Variance))+'</td><td class="num">'+esc(r.VariancePct===null?'—':r.VariancePct.toFixed(2)+'%')+'</td><td class="num">'+F0(r.BudgetedBranches)+'</td></tr>').join('');
+  const budgetHeaders=['Month','Budget ('+scaleCode+')','Actual Net Sales ('+scaleCode+')','Variance ('+scaleCode+')','Variance %'];
+  const vcol=v=>v===null||v===undefined||!isFinite(v)?'':(v<0?' style="color:#c62828;font-weight:700"':' style="color:#12803c;font-weight:700"');
+  const budgetBody=rows.map(r=>'<tr><td>'+esc(r.Month)+'</td><td class="num">'+esc(displayBudgetValue(r.Budget))+'</td><td class="num">'+esc(displayBudgetValue(r.Actual))+'</td><td class="num"'+vcol(r.Variance)+'>'+esc(displayBudgetValue(r.Variance))+'</td><td class="num"'+vcol(r.VariancePct)+'>'+esc(r.VariancePct===null?'—':r.VariancePct.toFixed(2)+'%')+'</td></tr>').join('');
   const budgetSum=rows.reduce((a,r)=>a+(r.Budget===null?0:r.Budget),0),actualSum=rows.reduce((a,r)=>a+(Number(r.Actual)||0),0),varianceSum=rows.reduce((a,r)=>a+(r.Variance===null?0:r.Variance),0);
-  const table='<div class="sc"><table data-ns-scale-preserved="1"><thead><tr>'+budgetHeaders.map(h=>'<th>'+esc(h)+'</th>').join('')+'</tr></thead><tbody>'+budgetBody+'</tbody><tfoot><tr><td><b>TOTAL</b></td><td class="num"><b>'+esc(displayBudgetValue(budgetSum))+'</b></td><td class="num"><b>'+esc(displayBudgetValue(actualSum))+'</b></td><td class="num"><b>'+esc(displayBudgetValue(varianceSum))+'</b></td><td></td><td></td></tr></tfoot></table></div>';
+  const table='<div class="sc"><table data-ns-scale-preserved="1"><thead><tr>'+budgetHeaders.map(h=>'<th>'+esc(h)+'</th>').join('')+'</tr></thead><tbody>'+budgetBody+'</tbody><tfoot><tr><td><b>TOTAL</b></td><td class="num"><b>'+esc(displayBudgetValue(budgetSum))+'</b></td><td class="num"><b>'+esc(displayBudgetValue(actualSum))+'</b></td><td class="num"'+vcol(varianceSum)+'><b>'+esc(displayBudgetValue(varianceSum))+'</b></td><td></td></tr></tfoot></table></div>';
   const empty='<div class="em" style="padding:14px">No budget figures are loaded for '+esc(y)+'. Download the branch budget template, enter monthly budgets in millions (for example, <b>1.1 = AED 1,100,000</b>), and upload the completed workbook.</div>';
   return '<div class="card ns-budget-card"><div class="row" style="justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap"><div><h3 style="margin:0">Monthly Budget vs Actual Sales</h3><p class="note" style="margin:4px 0 0">Actual sales use mapped sales-account activity. Monthly values are displayed in '+esc(nsUiScaleLabel())+'.</p></div>'+(!onDashboard&&can(2)?'<button class="btn s xs" onclick="nsDownloadBranchBudgetTemplate()">Download Branch Budget Template</button>':'')+'</div>'+controls+(has?'<div class="ns-budget-chart-wrap">'+nsBudgetSvg(y,e)+'</div>'+legend+table:empty)+(onDashboard&&can(2)?'<div class="row noprint"><button class="btn s xs" onclick="tab=\'budget\';render();window.scrollTo(0,0)">Open Budget / Upload Figures</button></div>':'')+'</div>';
 }
@@ -3488,12 +3569,12 @@ async function nsBudgetImportFile(file){
 }
 async function nsBudgetClearYear(){if(!can(3)){msg('Only an administrator can clear budgets.',true);return}if(!await uiConfirm('Delete all imported budget figures for '+nsBudgetCurrentYear()+'?'))return;const y=nsBudgetCurrentYear(),before=nsBudgets.length;nsBudgets=nsBudgets.filter(r=>String(r.year)!==String(y));addLog('Budget',String(y),'Cleared',(before-nsBudgets.length)+' budget branch-year row(s) removed');changed();render();msg('Budgets cleared for '+y+'.')}
 function nsBudgetExportRows(){return nsBudgetData().map(r=>({Year:r.year,Entity:r.entity,Branch:r.branch,...Object.fromEntries(NS_BUDGET_MONTHS.map((m,i)=>[m[0]+' (AED Millions)',nsBudgetValue(r,i)]))})).sort((a,b)=>a.Year-b.Year||a.Entity.localeCompare(b.Entity)||a.Branch.localeCompare(b.Branch))}
-function nsBudgetPerformanceExportRows(){return [...new Set(nsBudgetData().map(r=>String(r.year)))].sort().flatMap(y=>['All','HB','HBK','LG'].flatMap(e=>nsBudgetMonthly(y,e).map(r=>({Year:y,Entity:e,Month:r.Month,'Budget (AED M)':r.Budget,'Actual Net Sales (AED M)':r.Actual,'Variance (AED M)':r.Variance,'Variance %':r.VariancePct,'Budgeted Branches':r.BudgetedBranches}))))}
+function nsBudgetPerformanceExportRows(){return [...new Set(nsBudgetData().map(r=>String(r.year)))].sort().flatMap(y=>['All','HB','HBK','LG'].flatMap(e=>nsBudgetMonthly(y,e).map(r=>({Year:y,Entity:e,Month:r.Month,'Budget (AED M)':r.Budget,'Actual Net Sales (AED M)':r.Actual,'Variance (AED M)':r.Variance,'Variance %':r.VariancePct}))))}
 V.budget=function(){
   const y=nsBudgetCurrentYear(),pairs=nsBudgetPairs(),years=nsBudgetYears(),allRows=nsBudgetRowsForYear(y),budgeted=allRows.filter(r=>(r.months||[]).some(v=>v!==null&&v!==undefined&&v!==''));
   const adminControls=can(2)?'<div class="row noprint" style="gap:8px;align-items:center;flex-wrap:wrap"><button class="btn s xs" onclick="nsDownloadBranchBudgetTemplate()">Download Template — Mapped Branches</button><label class="btn xs" style="cursor:pointer">Upload Completed Budget<input type="file" accept=".xlsx,.xls,.xlsm" style="display:none" onchange="nsBudgetImportFile(this.files[0]);this.value=\'\'"></label>'+(can(3)?'<button class="btn d xs" onclick="nsBudgetClearYear()">Clear Selected Year</button>':'')+'</div>':'<p class="note">Budget upload is restricted to editor and administrator accounts. Viewers can review the comparison charts and tables.</p>';
   const mappedTbl=tbl(pairs.map(p=>({Entity:p.Entity,Branch:p.Branch,'Budget Year':y,Months_Budgeted:(allRows.find(r=>r.entity===p.Entity&&norm(r.branch)===norm(p.Branch)&&String(r.year)===String(y))?.months||[]).filter(v=>v!==null&&v!==undefined&&v!=='').length})),['Entity','Branch','Budget Year','Months_Budgeted'],{max:5000});
-  return '<div class="card"><h2 style="margin:0 0 6px">Branch Budget &amp; Forecast</h2><p class="note">Download a workbook prefilled with every currently mapped HB, HBK and LG branch (Events and unmapped locations are excluded). Enter January–December budgets in AED millions: <b>1.1 means AED 1,100,000</b>. Upload the edited workbook to update the budget shared with the application.</p>'+adminControls+'<p class="note">Mapped branches available in the template: '+F0(pairs.length)+' · Branch-year budget rows with any value for '+esc(y)+': '+F0(budgeted.length)+'.</p></div>'+nsBudgetGraphCard(false)+'<div class="card"><h3>Mapped Branches in Budget Template</h3>'+mappedTbl+'</div>';
+  return '<div class="card"><h2 style="margin:0 0 6px">Branch Budget &amp; Forecast</h2><p class="note">Download a workbook prefilled with every currently mapped HB, HBK and LG branch (Events and unmapped locations are excluded). Enter January–December budgets in AED millions: <b>1.1 means AED 1,100,000</b>. Upload the edited workbook to update the budget shared with the application.</p>'+adminControls+'<p class="note">Mapped branches available in the template: '+F0(pairs.length)+' · Branch-year budget rows with any value for '+esc(y)+': '+F0(budgeted.length)+'.</p></div>'+nsBudgetGraphCard(false)+(can(2)?'<div class="card"><h3>Mapped Branches in Budget Template</h3>'+mappedTbl+'</div>':'');
 };
 // Put the new Budget tab beside Comparison; honor any custom saved position if the admin has already set one.
 if(!NS_TABS.some(t=>t[0]==='budget'))NS_TABS.splice(Math.max(0,NS_TABS.findIndex(t=>t[0]==='cmp')+1),0,['budget','Branch Budget']);
@@ -3960,6 +4041,238 @@ render=function(){nsRenderBeforeScaleAndControls();try{nsApplySummaryDisplayScal
 render();
 boot();
 if('serviceWorker' in navigator&&/^https?:/.test(location.protocol))navigator.serviceWorker.register('sw.js').catch(()=>{});
+
+/* ===== Same period vs last year (dashboard) ===== */
+function nsYoYShift(d){const p=String(d).split('-');return (Number(p[0])-1)+'-'+p[1]+'-'+p[2]}
+function nsYoYCard(){
+  try{
+    let rows=nsAll().filter(r=>r.mapped&&['HB','HBK','LG'].includes(nsEntityCode(r.ent)));
+    rows=rows.filter(r=>(!flt.ent||r.ent===flt.ent)&&(!flt.br||r.br===flt.br)&&(!flt.ev||r.ev===flt.ev)&&(!dashRegion||nsEntityCode(r.ent)===dashRegion));
+    const dates=rows.map(r=>r.from).filter(Boolean).sort();if(!dates.length)return '';
+    const last=dates[dates.length-1];let from,to;
+    if(!flt.df&&!flt.dt){from=last.slice(0,7)+'-01';to=last}else{from=flt.df||dates[0];to=flt.dt||last}
+    const pf=nsYoYShift(from),pt=nsYoYShift(to);
+    const sum=(a,b,code)=>rows.filter(r=>r.from>=a&&r.from<=b&&(!code||nsEntityCode(r.ent)===code)).reduce((x,r)=>x+(Number(r.net)||0),0);
+    const ents=['HB','HBK','LG'].filter(c=>rows.some(r=>nsEntityCode(r.ent)===c));
+    const money=v=>{try{return nsUiMoney(v)}catch(e){return F2(v)}};
+    const col=v=>v<0?' style="color:#c62828;font-weight:700"':' style="color:#12803c;font-weight:700"';
+    const line=(label,cur,prev,bold)=>{const v=cur-prev,pc=prev?v/Math.abs(prev)*100:null,has=prev!==0;
+      const b=t=>bold?'<b>'+t+'</b>':t;
+      return '<tr><td>'+b(esc(label))+'</td><td class="num">'+b(esc(money(cur)))+'</td><td class="num">'+b(esc(has?money(prev):'—'))+'</td><td class="num"'+(has?col(v):'')+'>'+b(esc(has?money(v):'—'))+'</td><td class="num"'+(pc===null?'':col(pc))+'>'+b(esc(pc===null?'—':pc.toFixed(1)+'%'))+'</td></tr>'};
+    const body=ents.map(c=>line(c,sum(from,to,c),sum(pf,pt,c))).join('')+line('Total',sum(from,to),sum(pf,pt),true);
+    const anyPrev=sum(pf,pt)!==0;
+    return '<div class="card"><h3>Same Period vs Last Year</h3><p class="note">'+esc(dfmt(from)+' – '+dfmt(to))+' compared with '+esc(dfmt(pf)+' – '+dfmt(pt))+'. With no dates selected, the latest month to date is used. Figures in '+esc(nsUiScaleLabel())+'.'+(anyPrev?'':' No sales are loaded yet for the same period last year.')+'</p><div class="sc"><table><thead><tr><th>Entity</th><th class="num">This period</th><th class="num">Same period last year</th><th class="num">Variance</th><th class="num">Variance %</th></tr></thead><tbody>'+body+'</tbody></table></div></div>';
+  }catch(e){return ''}
+}
+(function(){const prev=V.dash;V.dash=function(){const h=prev.apply(this,arguments);return h+nsYoYCard()}})();
+
+
+/* ===== Accounting number format (100,000.00) on every Excel export ===== */
+(function(){
+  function acctSheet(ws){const X=window.XLSX;if(!ws||!ws['!ref'])return;const R=X.utils.decode_range(ws['!ref']),heads={};
+    for(let c=R.s.c;c<=R.e.c;c++){const h=ws[X.utils.encode_cell({r:R.s.r,c})];heads[c]=h?String(h.v):''}
+    for(let r=R.s.r+1;r<=R.e.r;r++)for(let c=R.s.c;c<=R.e.c;c++){const cell=ws[X.utils.encode_cell({r,c})];
+      if(cell&&cell.t==='n'){const h=heads[c];cell.z=/^(Budget Year|Year)$/.test(h)?'0':NS_COUNT_COLS.test(h)?'#,##0':/AED Millions/i.test(h)?'#,##0.00######':'#,##0.00'}}}
+  function install(){const X=window.XLSX;if(!X||!X.utils)return false;if(X.utils.__acct)return true;
+    ['json_to_sheet','aoa_to_sheet'].forEach(n=>{const f=X.utils[n];if(typeof f!=='function')return;X.utils[n]=function(){const ws=f.apply(this,arguments);try{acctSheet(ws)}catch(e){}return ws}});
+    X.utils.__acct=1;return true}
+  if(!install()){let k=0;const t=setInterval(()=>{if(install()||++k>60)clearInterval(t)},500)}
+})();
+
+/* ===== v6: zero-sales alerts (closed / resolve), summary drafts, saved views, collapsible admin settings, detailed error reports ===== */
+(function(){const st=document.createElement('style');st.textContent=
+'details.ns-acc{padding:0!important}details.ns-acc>summary{cursor:pointer;padding:14px 16px;font-weight:700;font-size:16px;list-style:none;display:flex;justify-content:space-between;align-items:center}'+
+'details.ns-acc>summary::-webkit-details-marker{display:none}details.ns-acc>summary::after{content:"\\25BE";font-size:14px;transition:transform .2s}details.ns-acc[open]>summary::after{transform:rotate(180deg)}'+
+'.ns-acc-body{padding:0 16px 14px}details.ns-acc-sub{border:1px solid #d9e2ee;border-radius:8px;margin:8px 0;background:#fff}details.ns-acc-sub>summary{cursor:pointer;padding:9px 12px;font-weight:600}details.ns-acc-sub .sc{padding:0 10px 8px}'+
+'.ns-chip{display:inline-block;border:1px solid #e0b4b4;background:#fdeeee;color:#9b1c1c;border-radius:999px;padding:2px 9px;margin:2px;font-size:12px;cursor:pointer}'+
+'.ns-alert-row{border-top:1px solid #e3e9f2;padding:9px 0}.ns-share a.btn{text-decoration:none;display:inline-block}.ns-viewbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:0 0 10px}';
+document.head.appendChild(st)})();
+
+/* ---------- detailed error reporting ---------- */
+let nsErrBusy=false,nsErrLast={sig:'',t:0};
+function nsDiagnose(e){
+  const m=String(e&&e.message||e||'Unknown error');
+  const rules=[
+    [/Failed to fetch|NetworkError|Load failed|network/i,'A network request failed or was blocked (offline, blocked by the browser/CORS, or the server or GitHub address is unreachable).','Check the internet connection and the server / GitHub settings, then try again.'],
+    [/quota|QuotaExceeded/i,'Browser storage is full, so data could not be saved.','Export a backup, clear old reports or logs, or free browser storage, then retry.'],
+    [/NotAllowedError|permission|denied/i,'The browser did not give permission to read the file or folder.','Press Refresh Data once and choose Allow when the browser asks for folder access.'],
+    [/AbortError|cancel/i,'The file or folder picker was cancelled before finishing.','Repeat the action and complete the picker.'],
+    [/popup|pop-up|blocked/i,'The browser blocked a new tab or window.','Allow pop-ups for this page and try again.'],
+    [/JSON|Unexpected token|Unexpected end|parse/i,'A file or saved data is not in the expected format (corrupt, cut off or wrong file type).','Re-export the source file or restore the last good backup, then upload again.'],
+    [/XLSX|Excel (reader|writer)/i,'The Excel library is not loaded.','Reload the page (internet may be needed for the Excel library) and retry.'],
+    [/Maximum call stack|Invalid array length|out of memory|allocation/i,'The browser ran out of memory or hit a limit processing too much data at once.','Split the upload into smaller files or narrow the filters and retry.'],
+    [/Cannot read propert|undefined|null/i,'A value that should exist was empty (usually a missing column in a file, or an unmapped location / account).','Check the headers of the last uploaded file and the Location / Account mappings.'],
+    [/is not a function|is not defined|is not iterable/i,'An internal code problem: something the page needs was not available.','Reload the page. If it repeats, send this message to the developer.']
+  ];
+  const hit=rules.find(r=>r[0].test(m));
+  const stack=String(e&&e.stack||'').split('\n').map(x=>x.trim()).filter(x=>/^at /.test(x)).slice(0,3).map(x=>x.replace(/\(?https?:\/\/[^)]*\/([^/)]*)\)?/,'($1)').replace(/\(?file:\/\/[^)]*\/([^/)]*)\)?/,'($1)')).join(' | ');
+  return {reason:m,cause:hit?hit[1]:'The exact cause could not be matched to a known problem.',fix:hit?hit[2]:'Repeat the action once. If it fails again, note the stage and reason below and contact the developer.',where:stack||'not available'};
+}
+function nsReportError(stage,err){
+  if(nsErrBusy)return;nsErrBusy=true;
+  try{
+    stage=typeof stage==='function'?stage():stage;
+    const d=nsDiagnose(err),sig=stage+'|'+d.reason,now=Date.now();
+    if(nsErrLast.sig===sig&&now-nsErrLast.t<8000)return;nsErrLast={sig,t:now};
+    const who=(typeof me!=='undefined'&&me)?me.u+' ('+me.role+')':'not signed in';
+    const full='Stage: '+stage+'\nExact reason: '+d.reason+'\nWhat it usually means: '+d.cause+'\nWhat to do: '+d.fix+'\nWhere in the code: '+d.where+'\nUser: '+who+' | Tab: '+(typeof tab!=='undefined'?tab:'')+' | Time: '+new Date().toLocaleString('sv-SE');
+    try{addLog('Error',stage,'Failed',full.replace(/\n/g,' | '))}catch(e){}
+    if(typeof can==='function'&&can(3)){try{msg('Error at '+stage+': '+d.reason,true)}catch(e){}try{uiAlert(full)}catch(e){}}
+    else{try{msg('Something went wrong while: '+stage+'. Please tell an administrator; they can see the exact reason in the Change Log.',true)}catch(e){}}
+  }finally{nsErrBusy=false}
+}
+window.addEventListener('error',ev=>{if(!ev||!ev.message||/ResizeObserver|^Script error\.?$/.test(ev.message))return;nsReportError('Unexpected error in the page',ev.error||ev.message)});
+window.addEventListener('unhandledrejection',ev=>{nsReportError('A background task',ev&&ev.reason||'Unknown')});
+function nsGuard(name,stage){const f=window[name];if(typeof f!=='function'||f.__g)return;const w=function(){try{const r=f.apply(this,arguments);if(r&&typeof r.then==='function')return r.catch(e=>{nsReportError(stage,e)});return r}catch(e){nsReportError(stage,e)}};w.__g=1;window[name]=w}
+[['xl','Export to Excel'],['csvPack','Export CSV Pack'],['nsPrintCurrentView','Print / PDF'],['nsV2OpenManagementPrint','Management PDF'],['nsOpenCustomerDetailsInNewTab','Customer report'],['syncAll','Refresh Data'],['fetchSource','Reports source folder scan'],['handle','File upload']].forEach(x=>nsGuard(x[0],x[1]));
+
+/* ---------- saved view (per user, this browser) ---------- */
+function nsViewKey(){return 'hbk_view_'+String(me&&me.u||'')}
+function nsSaveView(){try{SV(nsViewKey(),{flt:Object.assign({},flt),dashRegion,tab});msg('View saved. These filters will be applied the next time you open the report.',false);render()}catch(e){nsReportError('Saving the view',e)}}
+function nsApplyView(){try{const v=LS(nsViewKey());if(!v||!v.flt){msg('No saved view yet.',true);return}flt=Object.assign({ent:'',br:'',ev:'',df:'',dt:'',src:''},v.flt);dashRegion=v.dashRegion||'';render()}catch(e){nsReportError('Applying the saved view',e)}}
+function nsClearView(){try{SV(nsViewKey(),null);msg('Saved view cleared.',false);render()}catch(e){nsReportError('Clearing the saved view',e)}}
+function nsViewBar(){const has=!!(LS(nsViewKey())||{}).flt;return '<div class="noprint ns-viewbar"><button class="btn s xs" onclick="nsSaveView()">Save view</button>'+(has?'<button class="btn s xs" onclick="nsApplyView()">Apply saved view</button><button class="btn s xs" onclick="nsClearView()">Clear saved view</button><span class="note">A saved view is applied automatically when you open the report.</span>':'<span class="note">Save your current entity, branch and date filters so they are remembered.</span>')+'</div>'}
+(function(){const f=nsFilters;nsFilters=function(){return f.apply(this,arguments)+nsViewBar()}})();
+(function(){const r=render;render=function(){
+  try{if(typeof me!=='undefined'&&me&&window.__nsViewUser!==me.u){window.__nsViewUser=me.u;const v=LS(nsViewKey());if(v&&v.flt){flt=Object.assign({ent:'',br:'',ev:'',df:'',dt:'',src:''},v.flt);dashRegion=v.dashRegion||''}}}catch(e){}
+  try{return r.apply(this,arguments)}catch(e){
+    nsReportError(()=>'Opening the "'+tab+'" tab',e);
+    try{const v=document.getElementById('view');if(v)v.innerHTML='<div class="card em">This tab could not be displayed. '+(can(3)?'Reason: '+esc(nsDiagnose(e).reason)+'. See the message shown and the Change Log for details.':'Please tell an administrator.')+'</div>'}catch(x){}
+  }}})();
+
+/* ---------- zero-sales alerts with closed-branch / resolve ---------- */
+function nsAlertState(){const c=(typeof pkg!=='undefined'&&pkg&&pkg.cfg)||{};const a=c.alertState||{};return {closed:Object.assign({},a.closed||{}),resolved:Object.assign({},a.resolved||{})}}
+function nsAlertSave(st){if(!can(2))return;pkg.cfg=Object.assign({},pkg.cfg||{},{alertState:st});touch();render()}
+let nsLastAlerts={list:[],closed:[]};
+function nsZeroSalesAlerts(){
+  const st=nsAlertState();
+  const base=nsAll().filter(r=>!r.skip&&r.from);
+  if(!base.length)return {list:[],closed:[],from:'',to:''};
+  let rows=base.filter(r=>r.mapped&&r.br!=='Events'&&['HB','HBK','LG'].includes(nsEntityCode(r.ent))&&(!flt.ent||r.ent===flt.ent)&&(!flt.br||r.br===flt.br)&&(!dashRegion||nsEntityCode(r.ent)===dashRegion));
+  const last=base.map(r=>r.from).sort().pop();
+  const to=flt.dt&&flt.dt<last?flt.dt:last;let from=flt.df||nsPeriodAddDays(to,-30);if(from>to)from=to;const cap=nsPeriodAddDays(to,-61);if(from<cap)from=cap;
+  const byLoc=new Map();
+  rows.forEach(r=>{const k=norm(r.location);let o=byLoc.get(k);if(!o){o={key:k,location:r.location,entity:nsEntityCode(r.ent),branch:r.br,days:new Map()};byLoc.set(k,o)}o.days.set(r.from,(o.days.get(r.from)||0)+(Number(r.net)||0))});
+  const list=[],closed=[];
+  byLoc.forEach(o=>{
+    const cl=st.closed[o.key];if(cl)closed.push({key:o.key,location:o.location,entity:o.entity,from:cl.from,note:cl.note||''});
+    const first=[...o.days.entries()].filter(x=>Math.abs(x[1])>0.004).map(x=>x[0]).sort()[0];if(!first)return;
+    const miss=[];
+    for(let d=(from>first?from:first);d<=to;d=nsPeriodAddDays(d,1)){
+      if(cl&&cl.from&&d>=cl.from)continue;if(Math.abs(o.days.get(d)||0)>0.004)continue;if(st.resolved[o.key+'|'+d])continue;miss.push(d)}
+    if(miss.length)list.push({key:o.key,location:o.location,entity:o.entity,branch:o.branch,missing:miss})
+  });
+  list.sort((a,b)=>b.missing.length-a.missing.length||a.location.localeCompare(b.location));
+  return {list,closed,from,to};
+}
+function nsAlertsCard(){
+  try{
+    const a=nsZeroSalesAlerts();nsLastAlerts=a;if(!a.from)return '';
+    const rows=a.list.map((x,i)=>'<div class="ns-alert-row"><div class="row" style="justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px"><div><b>'+esc(x.location)+'</b> <span class="note">('+esc(x.entity)+') · '+F0(x.missing.length)+' day(s) without sales</span></div><div><button class="btn s xs" onclick="nsAlertResolveAll('+i+')">Resolve all</button> <button class="btn s xs" onclick="nsAlertClose('+i+')">Branch is closed</button></div></div><div>'+x.missing.slice(0,10).map((d,j)=>'<span class="ns-chip" title="Click to resolve this day" onclick="nsAlertResolveDay('+i+','+j+')">'+esc(dfmt(d))+'</span>').join('')+(x.missing.length>10?'<span class="note"> +'+F0(x.missing.length-10)+' more</span>':'')+'</div></div>').join('');
+    const closed=a.closed.length?'<h4 style="margin:14px 0 4px">Closed branches</h4>'+a.closed.map(c=>'<div class="ns-alert-row"><b>'+esc(c.location)+'</b> <span class="note">closed from '+esc(dfmt(c.from))+(c.note?' · '+esc(c.note):'')+'</span> <button class="btn s xs" onclick="nsAlertReopen(\''+esc(c.key).replace(/'/g,"\\'")+'\')">Reopen</button></div>').join(''):'';
+    return '<div class="card noprint"><h3>Zero-sales alerts'+(a.list.length?' ('+F0(a.list.length)+' branch'+(a.list.length>1?'es':'')+')':'')+'</h3><p class="note">Days with no sales for a branch between '+esc(dfmt(a.from))+' and '+esc(dfmt(a.to))+' (based on the dates selected, otherwise the last 31 days loaded). Usually a missing GL upload, or the branch was closed. Resolve a day, or mark the branch closed so it stops alerting.</p>'+(rows||'<p class="em">No zero-sales days found. ✔</p>')+closed+'</div>';
+  }catch(e){nsReportError('Building the zero-sales alerts',e);return ''}
+}
+async function nsAlertResolveDay(i,j){try{if(!can(2))return;const x=nsLastAlerts.list[i];if(!x)return;const d=x.missing[j];const why=await uiPrompt('Resolve '+dfmt(d)+' for '+x.location+'. Note (optional):','Upload received / no trading that day');if(why===null)return;const st=nsAlertState();st.resolved[x.key+'|'+d]={reason:String(why||''),by:me.u,at:ts()};addLog('Alert',x.location+' · '+d,'Resolved',String(why||''));nsAlertSave(st)}catch(e){nsReportError('Resolving a zero-sales day',e)}}
+async function nsAlertResolveAll(i){try{if(!can(2))return;const x=nsLastAlerts.list[i];if(!x)return;const why=await uiPrompt('Resolve all '+x.missing.length+' day(s) for '+x.location+'. Note (optional):','Reviewed');if(why===null)return;const st=nsAlertState();x.missing.forEach(d=>{st.resolved[x.key+'|'+d]={reason:String(why||''),by:me.u,at:ts()}});addLog('Alert',x.location,'Resolved',x.missing.length+' day(s). '+String(why||''));nsAlertSave(st)}catch(e){nsReportError('Resolving zero-sales days',e)}}
+async function nsAlertClose(i){try{if(!can(2))return;const x=nsLastAlerts.list[i];if(!x)return;const d=await uiPrompt('Closed from which date? (YYYY-MM-DD). Alerts stop from this date for '+x.location+'.',x.missing[0]);if(d===null)return;if(!/^\d{4}-\d{2}-\d{2}$/.test(String(d).trim())){uiAlert('Date not accepted: "'+d+'". Please type it like 2026-10-01.');return}const note=await uiPrompt('Reason / note (optional):','Branch closed');if(note===null)return;const st=nsAlertState();st.closed[x.key]={from:String(d).trim(),note:String(note||''),by:me.u,at:ts()};addLog('Alert',x.location,'Marked closed','From '+String(d).trim()+'. '+String(note||''));nsAlertSave(st)}catch(e){nsReportError('Marking a branch closed',e)}}
+function nsAlertReopen(key){try{if(!can(2))return;const st=nsAlertState();delete st.closed[key];addLog('Alert',key,'Reopened','Closed status removed');nsAlertSave(st)}catch(e){nsReportError('Reopening a branch',e)}}
+
+/* ---------- daily / weekly summary drafts ---------- */
+function nsSummaryText(kind){
+  let rows=nsAll().filter(r=>!r.skip&&r.mapped&&['HB','HBK','LG'].includes(nsEntityCode(r.ent))&&(!flt.ent||r.ent===flt.ent)&&(!flt.br||r.br===flt.br)&&(!dashRegion||nsEntityCode(r.ent)===dashRegion));
+  const dates=rows.map(r=>r.from).filter(Boolean).sort();if(!dates.length)return '';
+  const last=dates[dates.length-1];let from,pf,pt,label;
+  if(kind==='daily'){from=last;pf=pt=nsPeriodAddDays(last,-7);label='Daily Sales Summary — '+dfmt(last)}else{from=nsPeriodAddDays(last,-6);pf=nsPeriodAddDays(last,-13);pt=nsPeriodAddDays(last,-7);label='Weekly Sales Summary — '+dfmt(from)+' to '+dfmt(last)}
+  const sum=(a,b,c)=>rows.filter(r=>r.from>=a&&r.from<=b&&(!c||nsEntityCode(r.ent)===c)).reduce((x,r)=>x+(Number(r.net)||0),0);
+  const cur=sum(from,last),prev=sum(pf,pt),v=cur-prev,pc=prev?v/Math.abs(prev)*100:null;
+  const ents=['HB','HBK','LG'].filter(c=>rows.some(r=>nsEntityCode(r.ent)===c));
+  let t='Dear Team,\n\nHome Bakery — '+label+'\n\nNet Sales: AED '+F2(cur);
+  if(ents.length)t+='\n'+ents.map(c=>'• '+c+': AED '+F2(sum(from,last,c))).join('\n');
+  if(prev)t+='\n\nCompared with '+(kind==='daily'?'the same day last week':'the previous 7 days')+': '+(v>=0?'+':'-')+'AED '+F2(Math.abs(v))+(pc===null?'':' ('+(pc>=0?'+':'')+pc.toFixed(1)+'%)');
+  try{const al=nsZeroSalesAlerts();if(al.list.length&&can(2))t+='\n\nAttention: '+al.list.length+' branch(es) have days without sales — '+al.list.slice(0,5).map(x=>x.location).join(', ')+(al.list.length>5?' and more':'')+'.'}catch(e){}
+  return t+'\n\nRegards';
+}
+function nsShareCard(){
+  try{
+    const d=nsSummaryText('daily');if(!d)return '';const w=nsSummaryText('weekly');
+    const wa=t=>'https://wa.me/?text='+encodeURIComponent(t),em=(t,s)=>'mailto:?subject='+encodeURIComponent(s)+'&body='+encodeURIComponent(t);
+    return '<div class="card noprint ns-share"><h3>Send Summary</h3><p class="note">One click opens a ready-written message for the latest day or the latest 7 days loaded. Review it, then send.</p><div class="row" style="gap:8px;flex-wrap:wrap"><a class="btn s xs" target="_blank" rel="noopener" href="'+esc(wa(d))+'">Daily · WhatsApp</a><a class="btn s xs" href="'+esc(em(d,'Home Bakery — Daily Sales Summary'))+'">Daily · Email</a><a class="btn s xs" target="_blank" rel="noopener" href="'+esc(wa(w))+'">Weekly · WhatsApp</a><a class="btn s xs" href="'+esc(em(w,'Home Bakery — Weekly Sales Summary'))+'">Weekly · Email</a></div></div>';
+  }catch(e){nsReportError('Building the summary message',e);return ''}
+}
+(function(){const prev=V.dash;V.dash=function(){const h=prev.apply(this,arguments);if(!reports.length)return h;return h+(can(2)?nsAlertsCard():'')+nsShareCard()}})();
+
+/* ---------- Super Admin settings: headings that open to show their options ---------- */
+window.nsAprOpen=window.nsAprOpen||{};
+function nsAprToggle(el){try{nsAprOpen[el.getAttribute('data-k')]=el.open}catch(e){}}
+(function(){
+  const prev=V.apr;
+  V.apr=function(){
+    const html=prev.apply(this,arguments);if(!can(4))return html;
+    try{
+      const t=document.createElement('template');t.innerHTML=html;const root=t.content;
+      const mk=(cls,title,key,children)=>{const d=document.createElement('details');d.className=cls;d.setAttribute('data-k',key);d.setAttribute('ontoggle','nsAprToggle(this)');if(nsAprOpen[key])d.setAttribute('open','');const s=document.createElement('summary');s.textContent=title;d.appendChild(s);const b=document.createElement('div');b.className='ns-acc-body';children.forEach(n=>b.appendChild(n));d.appendChild(b);return d};
+      [...root.querySelectorAll('.card')].filter(c=>!c.parentElement||!c.parentElement.closest('.card')).forEach(card=>{
+        const h=card.querySelector(':scope > h3');if(!h)return;const title=h.textContent.trim();
+        const kids=[...card.childNodes].filter(n=>n!==h);
+        if(/^Viewer \/ Editor content visibility/.test(title)){
+          const tables=card.querySelectorAll('table');const main=tables[0];
+          if(main){
+            const head=main.querySelector('thead').outerHTML,groups=new Map();
+            [...main.querySelectorAll('tbody tr')].forEach(tr=>{const lab=tr.children[0].textContent.trim();const g=lab.includes(' · ')?lab.split(' · ')[0]:(lab.includes(' (')?'Other':lab.split(' ')[0]);if(!groups.has(g))groups.set(g,[]);groups.get(g).push(tr.outerHTML)});
+            const subs=[...groups.entries()].map(([g,trs])=>{const box=document.createElement('div');box.className='sc';box.innerHTML='<table>'+head+'<tbody>'+trs.join('')+'</tbody></table>';return mk('ns-acc-sub',g+' ('+trs.length+')','role:'+g,[box])});
+            const note=card.querySelector('p.note');const out=[];if(note)out.push(note.cloneNode(true));subs.forEach(x=>out.push(x));
+            const h4=card.querySelector('h4');if(h4&&tables[1]){const box=document.createElement('div');box.className='sc';box.innerHTML=tables[1].outerHTML;out.push(mk('ns-acc-sub','Editor tab access','role:tabs',[box]))}
+            card.replaceWith(mk('card ns-acc',title,'apr:'+title,out));return;
+          }
+        }
+        card.replaceWith(mk('card ns-acc',title,'apr:'+title,kids));
+      });
+      return t.innerHTML;
+    }catch(e){nsReportError('Building the Appearance settings page',e);return html}
+  };
+})();
+
+
+/* ===== v7: user / security changes always start from the newest shared data ===== */
+async function nsLatestSharedCheck(label){
+  try{
+    if(!pkg)return true;
+    const np=await loadPub();
+    if(!np||!np.id||np.id===baseId)return true;
+    if(!unpub){await refreshData(true);return !!me}
+    return await uiConfirm('Another person published a newer shared version (revision '+np.rev+', saved '+np.at+') after this device loaded revision '+baseRev+'. This device also has unpublished changes, so "'+label+'" would overwrite that newer shared data.\n\nOK = continue and overwrite the newer version.\nCancel = stop; then open Share & Backup, press Refresh (this discards unpublished changes on this device) and repeat.');
+  }catch(e){nsReportError(label+' - checking the newest shared data',e);return false}
+}
+(function(){
+  const oAdd=addUser,oRole=chRole,oDel=delUser,oReset=resetUserPw;
+  addUser=async function(){
+    const u=$('#nu')?$('#nu').value:'',p=$('#np')?$('#np').value:'',r=$('#nr')?$('#nr').value:'';
+    if(!await nsLatestSharedCheck('Create user'))return;
+    if($('#nu')){$('#nu').value=u;if($('#np'))$('#np').value=p;if($('#nr'))$('#nr').value=r}
+    try{return await oAdd.apply(this,arguments)}catch(e){nsReportError('Creating the user "'+u+'"',e)}
+  };
+  const byName=(fn,label)=>async function(i){
+    const x=U()[i];if(!x)return fn.apply(this,arguments);const name=x.u,rest=[].slice.call(arguments,1);
+    if(!await nsLatestSharedCheck(label))return;
+    const j=U().findIndex(y=>y.u===name);
+    if(j<0){uiAlert('The account "'+name+'" no longer exists in the newest shared data, so nothing was changed.');return}
+    try{return await fn.apply(this,[j].concat(rest))}catch(e){nsReportError(label+' for "'+name+'"',e)}
+  };
+  chRole=byName(oRole,'Change role');delUser=byName(oDel,'Delete user');resetUserPw=byName(oReset,'Reset password');
+})();
+
+/* ===== Viewer guards (defence in depth: hidden buttons cannot be triggered either) ===== */
+(function(){
+  const isViewer=()=>!!(typeof me!=='undefined'&&me&&me.role==='viewer');
+  ['syncAll','clearAll','nsDownloadTemplate','nsOpenGLDetail','nsDownloadBranchBudgetTemplate'].forEach(n=>{
+    try{const f=window[n];if(typeof f==='function'){window[n]=function(){if(isViewer())return;return f.apply(this,arguments)}}}catch(e){}
+  });
+  const fi=document.getElementById('fi');
+  if(fi)fi.addEventListener('change',e=>{if(isViewer()){e.stopImmediatePropagation();fi.value=''}},true);
+  const dz=document.getElementById('drop');
+  if(dz)['drop','dragover','dragenter'].forEach(ev=>dz.addEventListener(ev,e=>{if(isViewer()){e.stopImmediatePropagation();e.preventDefault()}},true));
+})();
 </script>
 </body>
 </html>
